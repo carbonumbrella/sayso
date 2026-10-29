@@ -1,0 +1,4 @@
+# Optional: the Gemma NPU server (npu_server.py), only with the "Gemma on NPU" component.
+fastapi==0.162.0
+uvicorn==0.54.0
+pydantic==2.14.1

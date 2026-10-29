@@ -1,0 +1,312 @@
+<Window x:Class="ClawVoice.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SaySo" Icon="app.ico" Width="900" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        WindowStartupLocation="CenterScreen" ShowInTaskbar="True"
+        FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13" Foreground="{DynamicResource Fg}">
+  <Border Style="{StaticResource Frame}">
+    <StackPanel Margin="22,16,22,20">
+      <Grid x:Name="TitleBar" Background="Transparent">
+        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="SaySo" FontSize="19" FontWeight="SemiBold" VerticalAlignment="Center"/>
+          <TextBlock x:Name="StatusText" Foreground="{DynamicResource Sub}" FontSize="12" Margin="12,3,0,0" VerticalAlignment="Center"/>
+        </StackPanel>
+        <Button x:Name="CloseBtn" Grid.Column="1" Style="{StaticResource Close}" ToolTip="Закрыть"/>
+      </Grid>
+
+      <!-- tabs: the Claw screen at 175% has little height, so one page at a time -->
+      <Border Style="{StaticResource SegBox}" Margin="0,12,0,4">
+        <UniformGrid Rows="1">
+          <RadioButton x:Name="TabMain" Content="Основное" GroupName="tab" Style="{StaticResource Seg}" IsChecked="True"/>
+          <RadioButton x:Name="TabVoice" Content="Голос" GroupName="tab" Style="{StaticResource Seg}"/>
+          <RadioButton x:Name="TabModel" Content="Модель" GroupName="tab" Style="{StaticResource Seg}"/>
+          <RadioButton x:Name="TabTg" Content="Телеграм" GroupName="tab" Style="{StaticResource Seg}"/>
+          <RadioButton x:Name="TabCmd" Content="Команды" GroupName="tab" Style="{StaticResource Seg}"/>
+          <RadioButton x:Name="TabPlug" Content="Плагины" GroupName="tab" Style="{StaticResource Seg}"/>
+          <RadioButton x:Name="TabSys" Content="Система" GroupName="tab" Style="{StaticResource Seg}"/>
+        </UniformGrid>
+      </Border>
+
+      <Grid>
+        <!-- ================= main ================= -->
+        <Grid x:Name="PageMain">
+          <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <StackPanel>
+            <TextBlock Text="ПОМОЩНИК" Style="{StaticResource Label}"/>
+            <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
+              <StackPanel>
+                <Grid Margin="0,8">
+                  <StackPanel Margin="0,0,56,0">
+                    <TextBlock Text="Диктовка и голосовые команды" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="DictationSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <CheckBox x:Name="DictationSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+                <Border Height="1" Background="{DynamicResource Border}"/>
+                <Grid Margin="0,8">
+                  <StackPanel Margin="0,0,56,0">
+                    <TextBlock x:Name="ListenTitle" Text="Откликаться на имя" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="ListenSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <CheckBox x:Name="ListenSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+                <Border Height="1" Background="{DynamicResource Border}"/>
+                <Grid Margin="0,8">
+                  <StackPanel Margin="0,0,56,0">
+                    <TextBlock x:Name="GemmaTitle" Text="Модель загружена" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="GemmaSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <CheckBox x:Name="GemmaSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+              </StackPanel>
+            </Border>
+            <TextBlock Text="ПРОЧЕЕ" Style="{StaticResource Label}"/>
+            <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
+              <StackPanel>
+                <Grid Margin="0,8">
+                  <StackPanel Margin="0,0,56,0">
+                    <TextBlock Text="Микрофон всегда готов от сети" FontWeight="SemiBold"/>
+                    <TextBlock Text="Быстрее отклик, пока включено слушание имени" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <CheckBox x:Name="WarmSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+                <Border Height="1" Background="{DynamicResource Border}"/>
+                <Grid Margin="0,8">
+                  <StackPanel Margin="0,0,56,0">
+                    <TextBlock Text="Запускать вместе с Windows" FontWeight="SemiBold"/>
+                    <TextBlock Text="Помощник, диктовка и модель (если не выгружена)" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <CheckBox x:Name="AutostartSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+          <StackPanel Grid.Column="2">
+            <TextBlock Text="СОЧЕТАНИЯ КЛАВИШ" Style="{StaticResource Label}"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="8"/><RowDefinition/></Grid.RowDefinitions>
+              <TextBlock Text="Диктовка" VerticalAlignment="Center"/>
+              <Button x:Name="HotkeyDictation" Grid.Column="1" Style="{StaticResource Flat}" Focusable="True"
+                      ToolTip="Нажми и затем нужное сочетание. Esc: отмена"/>
+              <TextBlock Grid.Row="2" Text="Команда" VerticalAlignment="Center"/>
+              <Button x:Name="HotkeyGemma" Grid.Row="2" Grid.Column="1" Style="{StaticResource Flat}" Focusable="True"
+                      ToolTip="Нажми и затем нужное сочетание. Esc: отмена"/>
+            </Grid>
+            <Grid Margin="0,6,0,0">
+              <TextBlock x:Name="HotkeyHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,110,0"
+                         Text="Диктовку держат, команду нажимают. Кнопку на корпусе назначь на то же сочетание в её утилите."/>
+              <Button x:Name="HotkeyReset" Content="По умолчанию" Style="{StaticResource Flat}" Height="30" FontSize="12"
+                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
+            </Grid>
+            <Grid Margin="0,22,0,0">
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Button x:Name="CommandsBtn" Content="Что умеет" Style="{StaticResource Flat}"/>
+              <Button x:Name="AmbiBtn" Grid.Column="2" Content="Подсветка" Style="{StaticResource Flat}"/>
+              <Button x:Name="LogBtn" Grid.Column="4" Content="Журнал" Style="{StaticResource Flat}"/>
+            </Grid>
+          </StackPanel>
+        </Grid>
+
+        <!-- ================= voice ================= -->
+        <Grid x:Name="PageVoice" Visibility="Collapsed">
+          <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <StackPanel>
+            <TextBlock Text="ИМЯ ПОМОЩНИКА" Style="{StaticResource Label}"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <TextBox x:Name="NameBox" Style="{StaticResource Field}"/>
+              <Button x:Name="NameBtn" Grid.Column="2" Content="Сохранить" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>
+            </Grid>
+            <Grid Margin="0,6,0,0">
+              <TextBlock x:Name="NameHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,120,0"
+                         Text="Зови по имени в начале фразы: «Мурмур, громкость сорок»."/>
+              <Button x:Name="TrainBtn" Content="Тренировать имя" Style="{StaticResource Flat}" Height="30" FontSize="12"
+                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
+            </Grid>
+            <TextBlock Text="ЯЗЫК" Style="{StaticResource Label}"/>
+            <Border Style="{StaticResource SegBox}">
+              <UniformGrid Rows="1">
+                <RadioButton x:Name="LangRu" Content="Русский" GroupName="lang" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="LangEn" Content="English" GroupName="lang" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="LangAuto" Content="Авто" GroupName="lang" Style="{StaticResource Seg}"/>
+              </UniformGrid>
+            </Border>
+            <TextBlock Text="МИКРОФОН" Style="{StaticResource Label}"/>
+            <ComboBox x:Name="MicBox" Style="{StaticResource Combo}"/>
+            <TextBlock Text="СЛУШАТЬ ПОСЛЕ ОТВЕТА" Style="{StaticResource Label}"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="60"/></Grid.ColumnDefinitions>
+              <Slider x:Name="FollowSlider" Minimum="0" Maximum="15" TickFrequency="1" IsSnapToTickEnabled="True"/>
+              <TextBlock x:Name="FollowText" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            </Grid>
+          </StackPanel>
+          <StackPanel Grid.Column="2">
+            <TextBlock Text="ГОЛОС ОТВЕТОВ" Style="{StaticResource Label}"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <ComboBox x:Name="VoiceBox" Style="{StaticResource Combo}"/>
+              <Button x:Name="VoiceTestBtn" Grid.Column="2" Content="Послушать" Style="{StaticResource Flat}"/>
+            </Grid>
+            <Grid Margin="0,12,0,0">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition/><ColumnDefinition Width="60"/></Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="8"/><RowDefinition/></Grid.RowDefinitions>
+              <TextBlock Text="Скорость" VerticalAlignment="Center"/>
+              <Slider x:Name="RateSlider" Grid.Column="1" Minimum="-5" Maximum="5" TickFrequency="1" IsSnapToTickEnabled="True"/>
+              <TextBlock x:Name="RateText" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold"/>
+              <TextBlock Grid.Row="2" Text="Громкость" VerticalAlignment="Center"/>
+              <Slider x:Name="VolumeSlider" Grid.Row="2" Grid.Column="1" Minimum="10" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True"/>
+              <TextBlock x:Name="VolumeText" Grid.Row="2" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            </Grid>
+            <TextBlock x:Name="VoiceHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,10,0,0"
+                       Text="Язык и микрофон применяются после перезапуска диктовки, это делается само."/>
+          </StackPanel>
+        </Grid>
+
+        <!-- ================= model ================= -->
+        <Grid x:Name="PageModel" Visibility="Collapsed">
+          <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <StackPanel>
+            <TextBlock Text="ЯЗЫКОВАЯ МОДЕЛЬ (НЕОБЯЗАТЕЛЬНО)" Style="{StaticResource Label}"/>
+            <Border Style="{StaticResource SegBox}">
+              <UniformGrid Rows="1">
+                <RadioButton x:Name="ProvNone" Content="Без модели" GroupName="prov" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="ProvNpu" Content="На NPU" GroupName="prov" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="ProvServer" Content="Свой сервер" GroupName="prov" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="ProvCloud" Content="Облако" GroupName="prov" Style="{StaticResource Seg}"/>
+              </UniformGrid>
+            </Border>
+            <TextBlock x:Name="ProvHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+            <StackPanel x:Name="ServerFields">
+              <TextBlock Text="АДРЕС (OPENAI-СОВМЕСТИМЫЙ)" Style="{StaticResource Label}"/>
+              <TextBox x:Name="UrlBox" Style="{StaticResource Field}"/>
+              <TextBlock Text="МОДЕЛЬ" Style="{StaticResource Label}"/>
+              <TextBox x:Name="ModelBox" Style="{StaticResource Field}"/>
+              <TextBlock Text="КЛЮЧ API (ХРАНИТСЯ ЗАШИФРОВАННЫМ)" Style="{StaticResource Label}"/>
+              <PasswordBox x:Name="KeyBox" Style="{StaticResource Secret}"/>
+            </StackPanel>
+            <Grid Margin="0,12,0,0">
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Button x:Name="ModelSaveBtn" Content="Сохранить" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>
+              <Button x:Name="ModelTestBtn" Grid.Column="2" Content="Проверить" Style="{StaticResource Flat}"/>
+            </Grid>
+            <TextBlock x:Name="ModelStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+          </StackPanel>
+          <StackPanel Grid.Column="2">
+            <TextBlock Text="ИНТЕРНЕТ" Style="{StaticResource Label}"/>
+            <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
+              <Grid Margin="0,8">
+                <StackPanel Margin="0,0,56,0">
+                  <TextBlock Text="Полностью офлайн" FontWeight="SemiBold"/>
+                  <TextBlock Text="Без погоды, поиска, Википедии и облачной модели. Диктовка и команды работают" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="OfflineSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
+            <TextBlock Text="ГОРОД ДЛЯ ПОГОДЫ" Style="{StaticResource Label}"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <TextBox x:Name="CityBox" Style="{StaticResource Field}"/>
+              <Button x:Name="CityBtn" Grid.Column="2" Content="Сохранить" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>
+            </Grid>
+            <TextBlock x:Name="CityNow" Foreground="{DynamicResource Sub}" FontSize="12" Margin="4,6,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Grid>
+
+        <!-- ================= telegram ================= -->
+        <StackPanel x:Name="PageTg" Visibility="Collapsed" MaxWidth="560" HorizontalAlignment="Left">
+          <TextBlock Text="СВОЙ БОТ В ТЕЛЕГРАМЕ" Style="{StaticResource Label}"/>
+          <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Sub}" FontSize="12" Margin="4,0,0,8"
+                     Text="1. Создай бота у @BotFather и скопируй токен.  2. Вставь токен ниже.  3. Напиши своему боту /start.  4. Нажми «Привязать»."/>
+          <PasswordBox x:Name="TgTokenBox" Style="{StaticResource Secret}"/>
+          <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+            <Button x:Name="TgLinkBtn" Content="Привязать" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>
+            <Button x:Name="TgTestBtn" Grid.Column="2" Content="Отправить проверку" Style="{StaticResource Flat}"/>
+          </Grid>
+          <TextBlock x:Name="TgStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+        </StackPanel>
+
+        <!-- ================= commands ================= -->
+        <Grid x:Name="PageCmd" Visibility="Collapsed">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="300"/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <StackPanel>
+            <TextBlock Text="МОИ КОМАНДЫ" Style="{StaticResource Label}"/>
+            <ListBox x:Name="CmdList" Style="{StaticResource Rows}" Height="250"/>
+            <Grid Margin="0,8,0,0">
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Button x:Name="CmdNewBtn" Content="Новая" Style="{StaticResource Flat}"/>
+              <Button x:Name="CmdDelBtn" Grid.Column="2" Content="Удалить" Style="{StaticResource Flat}"/>
+            </Grid>
+          </StackPanel>
+          <StackPanel Grid.Column="2">
+            <TextBlock Text="ФРАЗЫ (ПО ОДНОЙ В СТРОКЕ, * = ЛЮБОЙ ХВОСТ)" Style="{StaticResource Label}"/>
+            <TextBox x:Name="CmdSay" Style="{StaticResource Field}" Height="56" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"/>
+            <TextBlock Text="ДЕЙСТВИЕ" Style="{StaticResource Label}"/>
+            <ComboBox x:Name="CmdDo" Style="{StaticResource Combo}"/>
+            <TextBlock x:Name="CmdArgLabel" Text="ПАРАМЕТР" Style="{StaticResource Label}"/>
+            <TextBox x:Name="CmdArg" Style="{StaticResource Field}"/>
+            <TextBlock Text="ОТВЕТ ПОМОЩНИКА (НЕОБЯЗАТЕЛЬНО)" Style="{StaticResource Label}"/>
+            <TextBox x:Name="CmdReply" Style="{StaticResource Field}"/>
+            <Grid Margin="0,12,0,0">
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Button x:Name="CmdSaveBtn" Content="Сохранить" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>
+              <Button x:Name="CmdFolderBtn" Grid.Column="2" Content="Открыть файл" Style="{StaticResource Flat}"/>
+            </Grid>
+            <TextBlock Text="ПРОВЕРИТЬ ФРАЗУ" Style="{StaticResource Label}"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <TextBox x:Name="CmdTestBox" Style="{StaticResource Field}"/>
+              <Button x:Name="CmdTestBtn" Grid.Column="2" Content="Проверить" Style="{StaticResource Flat}"/>
+            </Grid>
+            <TextBlock x:Name="CmdStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,6,0,0"/>
+          </StackPanel>
+        </Grid>
+
+        <!-- ================= plugins ================= -->
+        <StackPanel x:Name="PagePlug" Visibility="Collapsed">
+          <TextBlock Text="ПЛАГИНЫ" Style="{StaticResource Label}"/>
+          <ListBox x:Name="PlugList" Style="{StaticResource Rows}" Height="300"/>
+          <Grid Margin="0,10,0,0">
+            <TextBlock Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,200,0" VerticalAlignment="Center"
+                       Text="Свой плагин: Python-файл с функцией register(api) в папке плагинов. Изменения подхватываются сами."/>
+            <Button x:Name="PlugFolderBtn" Content="Открыть папку плагинов" Style="{StaticResource Flat}" HorizontalAlignment="Right"/>
+          </Grid>
+        </StackPanel>
+
+        <!-- ================= system ================= -->
+        <Grid x:Name="PageSys" Visibility="Collapsed">
+          <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <StackPanel>
+            <TextBlock Text="РАСПОЗНАВАНИЕ РЕЧИ" Style="{StaticResource Label}"/>
+            <Border Style="{StaticResource SegBox}">
+              <UniformGrid Rows="1">
+                <RadioButton x:Name="DevAuto" Content="Авто" GroupName="dev" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="DevNpu" Content="NPU" GroupName="dev" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="DevGpu" Content="Видеокарта" GroupName="dev" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="DevCpu" Content="Процессор" GroupName="dev" Style="{StaticResource Seg}"/>
+              </UniformGrid>
+            </Border>
+            <TextBlock x:Name="HwText" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0" Text="Определяю железо…"/>
+            <TextBlock Text="ДАННЫЕ" Style="{StaticResource Label}"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Button x:Name="ExportBtn" Content="Экспорт настроек" Style="{StaticResource Flat}"/>
+              <Button x:Name="ImportBtn" Grid.Column="2" Content="Импорт" Style="{StaticResource Flat}"/>
+            </Grid>
+            <Button x:Name="DiagBtn" Content="Собрать отчёт для диагностики" Style="{StaticResource Flat}" Margin="0,8,0,0"/>
+            <TextBlock x:Name="SysStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+          </StackPanel>
+          <StackPanel Grid.Column="2">
+            <TextBlock Text="ОБНОВЛЕНИЯ" Style="{StaticResource Label}"/>
+            <TextBlock x:Name="VersionText" FontWeight="SemiBold"/>
+            <Button x:Name="UpdateBtn" Content="Проверить обновления" Style="{StaticResource Flat}" Margin="0,10,0,0"/>
+            <TextBlock x:Name="UpdateStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+          </StackPanel>
+        </Grid>
+      </Grid>
+    </StackPanel>
+  </Border>
+</Window>

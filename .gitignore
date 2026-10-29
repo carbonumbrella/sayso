@@ -1,0 +1,8 @@
+publish/
+src/bin/
+src/obj/
+*.log
+__pycache__/
+.venv/
+CREDENTIALS.md
+.env
