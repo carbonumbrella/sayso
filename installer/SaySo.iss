@@ -7,7 +7,7 @@
 #define AppName "SaySo"
 #define RuntimeUrl "https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe"
 #ifndef AppVersion
-  #define AppVersion "0.3.2"
+  #define AppVersion "0.3.3"
 #endif
 #ifndef Stage
   #define Stage "..\publish\stage"
@@ -57,9 +57,12 @@ Filename: "{app}\app\SaySo.exe"; Parameters: "--set-autostart off"; Tasks: not a
 Filename: "{app}\app\SaySo.exe"; Description: "Запустить SaySo"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\app\SaySo.exe"; Parameters: "--quit"; Flags: runhidden; RunOnceId: "quit"
+; Every process of the app must be gone before [UninstallDelete]: files in use stayed behind, and the next
+; install then failed on a half-deleted tools\python. The elevated hotkey helper can only be ended elevated.
+Filename: "{app}\app\SaySo.exe"; Parameters: "--quit"; Flags: runhidden waituntilterminated; RunOnceId: "quit"
 Filename: "{app}\app\SaySo.exe"; Parameters: "--set-autostart off"; Flags: runhidden waituntilterminated; RunOnceId: "autostart"
-Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN SaySoHotkeys /F"; Flags: runhidden shellexec; Verb: "runas"; RunOnceId: "task"
+Filename: "{cmd}"; Parameters: "/c schtasks /End /TN SaySoHotkeys & schtasks /Delete /TN SaySoHotkeys /F"; Flags: runhidden shellexec waituntilterminated; Verb: "runas"; RunOnceId: "task"
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -like '{app}\*' } | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }; Start-Sleep 1"""; Flags: runhidden waituntilterminated; RunOnceId: "kill"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\.venv"

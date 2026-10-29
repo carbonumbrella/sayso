@@ -38,6 +38,11 @@ try {
     # 2. Python 3.12 + venv (uv keeps its own Python; nothing is installed system-wide)
     $py = Join-Path $AppDir '.venv\Scripts\python.exe'
     if (-not (Test-Path $py)) {
+        # leftovers of a half-done uninstall (files that were in use) make uv think Python is there and then fail
+        # ("failed to write ... Lib\EXTERNALLY-MANAGED: path not found"): start both from scratch
+        foreach ($d in (Join-Path $AppDir 'tools\python'), (Join-Path $AppDir '.venv')) {
+            if (Test-Path $d) { Step "removing the incomplete $d"; Remove-Item $d -Recurse -Force }
+        }
         # A private Python inside the app (tools\python), no registry entries, no shims. The venv is created from
         # the exact versioned folder: uv's "cpython-3.12-..." minor-version link is a junction, and processes
         # started by the installer may not follow junctions ("os error 448, untrusted mount point").
