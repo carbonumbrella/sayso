@@ -35,6 +35,7 @@ namespace ClawVoice
         int _dictateRestarts;
         DateTime _serverStartedAt = DateTime.MinValue;
         static volatile string _status = "";
+        bool _brokenShown;
         Mutex? _overlayMutex;
 
         [STAThread]
@@ -142,6 +143,18 @@ namespace ClawVoice
         {
             try
             {
+                if (!Stack.PythonHealthy())  // starting it would only pop the launcher's error box again and again
+                {
+                    _status = "Установка повреждена: запусти установщик SaySo ещё раз";
+                    if (!_brokenShown)
+                    {
+                        _brokenShown = true;
+                        Log.Write("the app's Python is broken: nothing started");
+                        Dispatcher.Invoke(() => _tray.ShowBalloonTip(15000, "SaySo",
+                            "Установка повреждена. Запусти установщик SaySo ещё раз, он всё починит.", Forms.ToolTipIcon.Error));
+                    }
+                    return;
+                }
                 var py = Stack.PythonCommandLines();
                 bool dictate = Stack.Has(py, Dictate);
                 if (_dictationWanted && !dictate)

@@ -42,6 +42,7 @@ namespace ClawVoice
         /// <summary>Runs sayso_cli.py and returns its JSON answer ({"error": ...} on failure).</summary>
         public static System.Text.Json.Nodes.JsonObject Cli(string args, string? stdin = null, int timeoutMs = 60000)
         {
+            if (!PythonHealthy()) return new System.Text.Json.Nodes.JsonObject { ["error"] = "установка повреждена, запусти установщик ещё раз" };
             try
             {
                 var psi = new ProcessStartInfo(Python, $"\"{Path.Combine(Dir, "sayso_cli.py")}\" {args}")
@@ -110,9 +111,27 @@ namespace ClawVoice
         public static bool Has(List<string> cmdLines, string script) =>
             cmdLines.Exists(c => c.Contains(script, StringComparison.OrdinalIgnoreCase));
 
+        /// <summary>The app's Python can start: pythonw.exe, pyvenv.cfg and the Python its "home" points at. A
+        /// half-deleted venv makes every start pop the launcher's modal "No pyvenv.cfg file" box, and the
+        /// supervisor restarting it every 10 s buried the desktop under them (Claw A8).</summary>
+        public static bool PythonHealthy()
+        {
+            try
+            {
+                string cfg = Path.Combine(Dir, @".venv\pyvenv.cfg");
+                if (!File.Exists(PythonW) || !File.Exists(cfg)) return false;
+                foreach (string line in File.ReadAllLines(cfg))
+                    if (line.StartsWith("home", StringComparison.OrdinalIgnoreCase) && line.Contains('='))
+                        return File.Exists(Path.Combine(line[(line.IndexOf('=') + 1)..].Trim(), "python.exe"));
+                return false;
+            }
+            catch { return false; }
+        }
+
         public static void Start(string script)
         {
             if (Running(script)) return;
+            if (!PythonHealthy()) { Log.Write($"not starting {script}: the app's Python is broken, run the installer again"); return; }
             Process.Start(new ProcessStartInfo(PythonW, $"\"{Path.Combine(Dir, script)}\"")
             { WorkingDirectory = Dir, UseShellExecute = false, CreateNoWindow = true });
             Log.Write("started " + script);

@@ -7,7 +7,7 @@
 #define AppName "SaySo"
 #define RuntimeUrl "https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe"
 #ifndef AppVersion
-  #define AppVersion "0.3.3"
+  #define AppVersion "0.3.4"
 #endif
 #ifndef Stage
   #define Stage "..\publish\stage"

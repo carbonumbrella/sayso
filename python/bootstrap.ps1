@@ -37,7 +37,10 @@ try {
 
     # 2. Python 3.12 + venv (uv keeps its own Python; nothing is installed system-wide)
     $py = Join-Path $AppDir '.venv\Scripts\python.exe'
-    if (-not (Test-Path $py)) {
+    # healthy = it really starts: a venv with python.exe but no pyvenv.cfg (half-deleted on the Claw A8) passed
+    # a plain Test-Path, and every later start popped the launcher's "No pyvenv.cfg file" box
+    $healthy = (Test-Path $py) -and (Test-Path (Join-Path $AppDir '.venv\pyvenv.cfg')) -and ((Run $py @('-c', 'import sys')) -eq 0)
+    if (-not $healthy) {
         # leftovers of a half-done uninstall (files that were in use) make uv think Python is there and then fail
         # ("failed to write ... Lib\EXTERNALLY-MANAGED: path not found"): start both from scratch
         foreach ($d in (Join-Path $AppDir 'tools\python'), (Join-Path $AppDir '.venv')) {
