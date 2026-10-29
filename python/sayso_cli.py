@@ -4,6 +4,7 @@
 #   tg-link <token>          save token, read chat id (after /start)   tg-test   send a test message
 #   secret <name>            value from stdin -> DPAPI secrets          location <city>
 #   models                   speech models present                     download <NPU|GPU|CPU> [size]
+#   gemma-download           Hugging Face token from stdin -> NPU server packages + Gemma model
 #   match <phrase>           which user command a phrase hits (command editor test)
 #   name-test <phrase>       does the wake regex accept it (name trainer)
 import json, os, sys
@@ -68,7 +69,37 @@ def complete(dest):
 
 
 def models():
-    return {k: complete(os.path.join(HERE, repo.split("/")[1])) for k, repo in WHISPER.items()}
+    m = {k: complete(os.path.join(HERE, repo.split("/")[1])) for k, repo in WHISPER.items()}
+    m["gemma"] = voice_settings.gemma_dir() is not None
+    return m
+
+
+def gemma_download(token):
+    """Gemma for the NPU server: its packages, then the gated model with the user's own Hugging Face token
+    (the user accepted Google's license on the model page). The token is used once and not stored."""
+    import importlib.util, subprocess
+    if not token:
+        raise RuntimeError("вставь токен Hugging Face")
+    if not all(importlib.util.find_spec(m) for m in ("fastapi", "uvicorn", "pydantic")):
+        req = os.path.join(HERE, "requirements-npu.txt")
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", req],
+                           capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError("не установились пакеты сервера: " + (r.stderr or r.stdout).strip()[-300:])
+    from huggingface_hub import snapshot_download
+    from huggingface_hub.errors import GatedRepoError, HfHubHTTPError
+    dest = os.path.join(HERE, voice_settings.GEMMA_REPO.split("/")[1])
+    try:
+        snapshot_download(voice_settings.GEMMA_REPO, local_dir=dest, token=token)  # resumes a partial download
+    except GatedRepoError:  # (also what a wrong token gets: the gated files answer 401 as "no access")
+        raise RuntimeError("нет доступа: проверь токен и прими лицензию Gemma на странице модели тем же аккаунтом")
+    except HfHubHTTPError as e:
+        if getattr(e.response, "status_code", 0) == 401:
+            raise RuntimeError("токен не подошёл")
+        raise
+    if not voice_settings.gemma_dir():
+        raise RuntimeError("модель скачалась не полностью, запусти загрузку ещё раз")
+    return {"model": dest}
 
 
 def download(device, size=None):
@@ -93,6 +124,8 @@ def main(argv):
             return out(hw())
         if cmd == "models":
             return out(models())
+        if cmd == "gemma-download":  # token on stdin, never on the command line
+            return out(gemma_download(sys.stdin.read().strip()))
         if cmd == "download":
             return out(download(args[0] if args else hw()["recommend"], args[1] if len(args) > 1 else None))
         if cmd == "tg-link":

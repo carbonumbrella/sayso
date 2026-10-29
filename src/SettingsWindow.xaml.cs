@@ -74,6 +74,10 @@ namespace ClawVoice
             foreach (var rb in new[] { ProvNone, ProvNpu, ProvServer, ProvCloud }) rb.Click += (_, _) => ModelFields();
             ModelSaveBtn.Click += (_, _) => SaveModel();
             ModelTestBtn.Click += async (_, _) => await TestModel();
+            GeminiKeyBtn.Click += (_, _) => Stack.Open("https://aistudio.google.com/apikey");
+            GemmaHowBtn.Click += (_, _) => Stack.Open(GuideUrl + "#gemma-на-npu");
+            GemmaGetBtn.Click += async (_, _) => await GetGemma();
+            _ = DetectNpu();
             OfflineSwitch.Click += (_, _) => Set("offline", OfflineSwitch.IsChecked == true);
             CityBtn.Click += async (_, _) => await SetCity();
             CityBox.KeyDown += async (_, e) => { if (e.Key == Key.Return) await SetCity(); };
@@ -177,7 +181,7 @@ namespace ClawVoice
             string dev = (string?)s["stt_device"] ?? "auto";
             (dev == "NPU" ? DevNpu : dev == "GPU" ? DevGpu : dev == "CPU" ? DevCpu : DevAuto).IsChecked = true;
             var llm = s["llm"] as JsonObject ?? new JsonObject();
-            string prov = (string?)llm["provider"] ?? "npu";
+            string prov = (string?)llm["provider"] ?? "none";
             (prov == "none" ? ProvNone : prov == "server" ? ProvServer : prov == "cloud" ? ProvCloud : ProvNpu).IsChecked = true;
             UrlBox.Text = (string?)llm["url"] ?? "";
             ModelBox.Text = (string?)llm["model"] ?? "";
@@ -209,7 +213,7 @@ namespace ClawVoice
             ListenTitle.Text = $"Откликаться на «{AssistantName()}»";
             ListenSwitch.IsChecked = listen;
             ListenSub.Text = listen ? "Слушаю имя от сети, микрофон всегда открыт" : "Выключено, зови кнопкой";
-            string prov = (string?)(Read()["llm"] as JsonObject)?["provider"] ?? "npu";
+            string prov = (string?)(Read()["llm"] as JsonObject)?["provider"] ?? "none";
             bool npu = prov == "npu";
             GemmaSwitch.IsEnabled = npu;
             GemmaTitle.Text = npu ? "Gemma загружена" : "Языковая модель";
@@ -354,18 +358,56 @@ namespace ClawVoice
 
         // ---------------- model page
 
+        const string GuideUrl = "https://github.com/carbonumbrella/sayso/blob/main/docs/ИНСТРУКЦИЯ.md";
+        const string GeminiUrl = "https://generativelanguage.googleapis.com/v1beta/openai", GeminiModel = "gemini-3.5-flash-lite";
+        bool _gemmaHere;
+
         void ModelFields()
         {
             bool external = ProvServer.IsChecked == true || ProvCloud.IsChecked == true;
             ServerFields.Visibility = external ? Visibility.Visible : Visibility.Collapsed;
+            GeminiKeyBtn.Visibility = ProvCloud.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            NpuFields.Visibility = ProvNpu.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            GemmaState.Text = _gemmaHere ? "Gemma скачана. Включается тумблером на вкладке «Основное»."
+                : "Gemma ещё не скачана (3.3 ГБ). Нужен бесплатный аккаунт Hugging Face, где принята лицензия Gemma, и его токен.";
+            GemmaGet.Visibility = _gemmaHere ? Visibility.Collapsed : Visibility.Visible;
             ProvHint.Text = ProvNone.IsChecked == true ? "Команды, плагины и ответы из интернета работают без модели. Свободного разговора нет."
-                : ProvNpu.IsChecked == true ? "Gemma 3 4B на NPU этого компьютера (Intel Core Ultra). Загрузка около 10 секунд, 3.8 ГБ памяти."
+                : ProvNpu.IsChecked == true ? "Gemma 3 4B прямо на NPU этого компьютера, без интернета. Загрузка около 10 секунд, 3.8 ГБ памяти."
                 : ProvServer.IsChecked == true ? "Свой сервер: Ollama (http://127.0.0.1:11434), LM Studio (http://127.0.0.1:1234), llama.cpp."
-                : "Облачный сервис с API в стиле OpenAI: адрес, модель и ключ. Фразы уходят в интернет.";
+                : "Облачная модель. Бесплатный Gemini: адрес и модель уже подставлены, нужен только ключ. Фразы для модели уходят в интернет.";
             if (ProvServer.IsChecked == true && (string.IsNullOrWhiteSpace(UrlBox.Text) || UrlBox.Text.Contains(":8081")))
                 UrlBox.Text = "http://127.0.0.1:11434";
             if (ProvCloud.IsChecked == true && (string.IsNullOrWhiteSpace(UrlBox.Text) || UrlBox.Text.Contains("127.0.0.1")))
-                UrlBox.Text = "https://api.openai.com/v1";
+            {
+                UrlBox.Text = GeminiUrl;
+                if (string.IsNullOrWhiteSpace(ModelBox.Text)) ModelBox.Text = GeminiModel;
+            }
+        }
+
+        /// <summary>"На NPU" only where there is an NPU: Gemma makes no sense on a CPU. Also: is Gemma downloaded.</summary>
+        async Task DetectNpu()
+        {
+            var hw = await Task.Run(() => Stack.Cli("hw"));
+            var m = await Task.Run(() => Stack.Cli("models"));
+            _gemmaHere = (bool?)m["gemma"] == true;
+            bool npu = (bool?)hw["npu"] == true;
+            ProvNpu.Visibility = npu ? Visibility.Visible : Visibility.Collapsed;
+            if (!npu && ProvNpu.IsChecked == true) ProvNone.IsChecked = true;
+            ModelFields();
+        }
+
+        async Task GetGemma()
+        {
+            string token = HfTokenBox.Password.Trim();
+            if (token.Length == 0) { GemmaState.Text = "Вставь токен Hugging Face."; return; }
+            GemmaGetBtn.IsEnabled = false;
+            GemmaState.Text = "Скачиваю Gemma, 3.3 ГБ. Это может занять от нескольких минут до получаса, окно можно закрыть позже…";
+            var r = await Task.Run(() => Stack.Cli("gemma-download", token, 3 * 3600 * 1000));
+            HfTokenBox.Password = "";
+            GemmaGetBtn.IsEnabled = true;
+            if (r["error"] is { } err) { GemmaState.Text = "Не скачалась: " + err; return; }
+            _gemmaHere = true;
+            ModelFields();
         }
 
         string ProviderKey() => ProvNone.IsChecked == true ? "none" : ProvServer.IsChecked == true ? "server"

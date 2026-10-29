@@ -3,7 +3,7 @@ Runs the model on the NPU so the iGPU stays free (e.g. during games).
 Separate port (default 8081); does NOT touch llama-swap on :8080.
 
 Env:
-  NPU_MODEL_DIR  IR dir (default Intel's gemma-3-4b-it-int4-cw-ov; Qwen3-4B abliterated is
+  NPU_MODEL_DIR  IR dir (default: voice_settings.gemma_dir(), Gemma next to the code; Qwen3-4B abliterated is
                  C:\\AI\\openvino-npu\\qwen3-4b-abl-ov-int4). A dir with
                  openvino_language_model.xml is a VLM and runs via VLMPipeline (text only here).
   NPU_DEVICE     NPU | GPU | CPU (default NPU)
@@ -25,12 +25,16 @@ import openvino_genai as ov_genai
 _state = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gemma_state.txt")
 if not os.path.exists(_state) or open(_state).read().strip() != "on":
     sys.exit(0)  # unloaded by default and on purpose (tray / "выгрузи Гемму"): only "загрузи Гемму" loads it
-MODEL_DIR = os.environ.get("NPU_MODEL_DIR", r"C:\AI\openvino-npu\gemma-3-4b-it-int4-cw-ov-intel")
+import voice_settings
+MODEL_DIR = os.environ.get("NPU_MODEL_DIR") or voice_settings.gemma_dir()
+if not MODEL_DIR:
+    print("Gemma is not downloaded (Settings -> Model -> On NPU)", flush=True)
+    sys.exit(0)
 DEVICE    = os.environ.get("NPU_DEVICE", "NPU")
 IS_QWEN   = "qwen" in MODEL_DIR.lower()
 IS_VLM    = os.path.exists(os.path.join(MODEL_DIR, "openvino_language_model.xml"))
 MODEL_ID  = os.environ.get("NPU_MODEL_ID", "qwen3-4b-abliterated-npu" if IS_QWEN else "gemma-3-4b-npu")
-CACHE_DIR = os.environ.get("NPU_CACHE_DIR", r"C:\AI\openvino-npu\npu_cache")
+CACHE_DIR = os.environ.get("NPU_CACHE_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "npu_cache"))
 PORT      = int(os.environ.get("NPU_PORT", "8081"))
 
 os.makedirs(CACHE_DIR, exist_ok=True)

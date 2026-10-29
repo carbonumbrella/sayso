@@ -127,22 +127,62 @@ namespace ClawVoice
                     _title.Text = "Языковая модель (необязательно)";
                     _text.Text = "Без модели работают все команды, диктовка и ответы из интернета. Модель нужна для свободного разговора " +
                                  "и сложных просьб.";
-                    bool npu = (bool?)_hw["npu"] == true && Directory.Exists(Path.Combine(Stack.Dir, "gemma-3-4b-it-int4-cw-ov-intel"));
-                    var prov = (string?)(s["llm"] as JsonObject)?["provider"] ?? (npu ? "npu" : "none");
+                    // Gemini (free key) for everyone; Gemma only where there is an NPU (on a CPU it makes no sense)
+                    bool npu = (bool?)_hw["npu"] == true;
+                    bool gemma = (bool?)Stack.Cli("models")["gemma"] == true;
+                    var prov = (string?)(s["llm"] as JsonObject)?["provider"] ?? "none";
                     var mseg = new UniformGrid { Rows = 1 };
-                    foreach (var (title, code, enabled) in new[] { ("Без модели", "none", true), ("На NPU", "npu", npu), ("Свой сервер", "server", true) })
+                    var keyPanel = new StackPanel { Visibility = prov == "cloud" ? Visibility.Visible : Visibility.Collapsed };
+                    var note = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(4, 8, 0, 0) };
+                    note.SetResourceReference(TextBlock.ForegroundProperty, "Sub");
+                    void Note(string code) => note.Text = code == "cloud"
+                        ? "Бесплатный ключ Gemini: нажми «Получить ключ», войди в Google-аккаунт, нажми «Create API key» и вставь ключ сюда."
+                        : code == "npu" ? (gemma ? "Gemma уже скачана и будет работать прямо на NPU, без интернета."
+                                                 : "Gemma скачивается потом в настройках, вкладка «Модель». Нужен бесплатный аккаунт Hugging Face.")
+                        : "Модель можно подключить позже на вкладке «Модель».";
+                    var options = new List<(string, string)> { ("Без модели", "none"), ("Gemini, бесплатно", "cloud") };
+                    if (npu) options.Add(("На NPU", "npu"));
+                    foreach (var (title, code) in options)
                     {
-                        var rb = new RadioButton { Content = title, GroupName = "wprov", Style = S("Seg"), IsEnabled = enabled, IsChecked = prov == code };
-                        rb.Click += (_, _) => SettingsWindow.Set("llm", new JsonObject
-                            { ["provider"] = code, ["url"] = code == "server" ? "http://127.0.0.1:11434" : "http://127.0.0.1:8081", ["model"] = "" });
+                        var rb = new RadioButton { Content = title, GroupName = "wprov", Style = S("Seg"), IsChecked = prov == code };
+                        rb.Click += (_, _) =>
+                        {
+                            SettingsWindow.Set("llm", new JsonObject
+                            {
+                                ["provider"] = code,
+                                ["url"] = code == "cloud" ? "https://generativelanguage.googleapis.com/v1beta/openai" : "http://127.0.0.1:8081",
+                                ["model"] = code == "cloud" ? "gemini-3.5-flash-lite" : ""
+                            });
+                            keyPanel.Visibility = code == "cloud" ? Visibility.Visible : Visibility.Collapsed;
+                            Note(code);
+                        };
                         mseg.Children.Add(rb);
                     }
                     _body.Children.Add(Section("МОДЕЛЬ"));
                     _body.Children.Add(new Border { Style = S("SegBox"), Child = mseg });
-                    var note = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(4, 8, 0, 0),
-                        Text = npu ? "На этом компьютере есть NPU и модель Gemma: она будет работать локально."
-                                   : "Gemma на NPU недоступна здесь. Свой сервер (Ollama, LM Studio) и облако настраиваются на вкладке «Модель»." };
-                    note.SetResourceReference(TextBlock.ForegroundProperty, "Sub");
+                    var key = new PasswordBox { Style = S("Secret") };
+                    var keyRow = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+                    keyRow.ColumnDefinitions.Add(new ColumnDefinition());
+                    keyRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+                    keyRow.ColumnDefinitions.Add(new ColumnDefinition());
+                    var getKey = new Button { Content = "Получить ключ", Style = S("Flat") };
+                    getKey.Click += (_, _) => Stack.Open("https://aistudio.google.com/apikey");
+                    var saveKey = new Button { Content = "Сохранить ключ", Style = S("Flat") };
+                    saveKey.Click += (_, _) =>
+                    {
+                        if (key.Password.Trim().Length == 0) return;
+                        var r = Stack.Cli("secret llm_api_key", key.Password.Trim());
+                        key.Password = "";
+                        note.Text = r["error"] is { } err ? "Ключ не сохранён: " + err : "Ключ сохранён. Можно говорить «давай поговорим».";
+                    };
+                    Grid.SetColumn(saveKey, 2);
+                    keyRow.Children.Add(getKey);
+                    keyRow.Children.Add(saveKey);
+                    keyPanel.Children.Add(Section("КЛЮЧ GEMINI (ХРАНИТСЯ ЗАШИФРОВАННЫМ)"));
+                    keyPanel.Children.Add(key);
+                    keyPanel.Children.Add(keyRow);
+                    _body.Children.Add(keyPanel);
+                    Note(prov);
                     _body.Children.Add(note);
                     break;
                 case 4:

@@ -8,6 +8,21 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 USER_DIR = os.environ.get("SAYSO_HOME") or os.path.join(os.environ.get("APPDATA", HERE), "SaySo")
 FILE = os.path.join(USER_DIR, "settings.json")
 LEGACY = os.path.join(HERE, "voice_settings.json")  # before 2026-10-29 the settings sat next to the code
+
+# Gemma 3 4B for the NPU server, next to the code (any install folder). Gated on Hugging Face: downloaded only
+# with the user's own token after they accept Google's license ("sayso_cli.py gemma-download").
+GEMMA_REPO = "OpenVINO/gemma-3-4b-it-int4-cw-ov"
+GEMMA_FILES = [f"openvino_{p}.{e}" for p in ("language_model", "text_embeddings_model", "tokenizer", "detokenizer")
+               for e in ("xml", "bin")]
+
+
+def gemma_dir():
+    """The folder with a complete Gemma model, or None. "-intel" is the name of the first manual download."""
+    for name in ("gemma-3-4b-it-int4-cw-ov", "gemma-3-4b-it-int4-cw-ov-intel"):
+        d = os.path.join(HERE, name)
+        if all(os.path.isfile(os.path.join(d, f)) for f in GEMMA_FILES):
+            return d
+    return None
 DEFAULTS = {
     "follow_sec": 6, "warm_mic": True, "tts_rate": 0, "tts_volume": 100, "tts_voice": "",
     "hotkey_dictation": "Ctrl+Alt+Win+W",   # rear M1 is mapped to it in ClawTweaks on the Claw
@@ -15,7 +30,7 @@ DEFAULTS = {
     "language": "ru",                        # commands, replies, recognition ("auto" = Whisper decides)
     "assistant_name": "Мурмур",              # the wake word and how the assistant calls itself
     "wake_names": ["мурмур", "мур-мур", "мур мур", "мурмура", "murmur", "мормор"],  # Whisper spellings
-    "llm": {"provider": "npu", "url": "http://127.0.0.1:8081", "model": ""},  # none | npu | server | cloud
+    "llm": {"provider": "none", "url": "http://127.0.0.1:8081", "model": ""},  # none | npu | server | cloud
     "offline": False,                        # no web search, weather, Wikipedia, cloud model
     "mic_device": "",                        # input device name ("" = system default)
     "stt_device": "auto",                    # auto | NPU | GPU | CPU

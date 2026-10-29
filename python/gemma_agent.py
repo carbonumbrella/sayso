@@ -1471,6 +1471,8 @@ def gemma_on():
         return False
     if prov != "npu":
         return True
+    if not voice_settings.gemma_dir():
+        return False  # not downloaded (Settings -> Model)
     try:
         return open(GEMMA_STATE).read().strip() == "on"
     except OSError:
@@ -1515,6 +1517,8 @@ def llm_voice():
 
 def gemma_load(on):
     """'загрузи / выгрузи Гемму': the state file is the switch, ensure_server() never starts Gemma while off."""
+    if on and not voice_settings.gemma_dir():
+        return "Gemma не скачана. Её можно скачать в настройках, вкладка «Модель», вариант «На NPU»"
     with open(GEMMA_STATE, "w") as f:
         f.write("on" if on else "off")
     if on:
@@ -2371,9 +2375,13 @@ def handle(text, dry=False):
                 log(f"done (fast) in {time.time() - t0:.1f}s")
                 _finish(text, fast[0])
                 return
-        if not gemma_on():  # unloaded: no guessing, offer to load ("да" in the follow-up window loads it)
-            PENDING["load"] = time.time() + 20
-            report("Без Gemma это не умею. Загрузить её?", vocal=True)
+        if not gemma_on():  # no model: no guessing
+            if provider() == "npu" and voice_settings.gemma_dir():  # unloaded: offer to load ("да" loads it)
+                PENDING["load"] = time.time() + 20
+                report("Без Gemma это не умею. Загрузить её?", vocal=True)
+            else:
+                report("Это я умею только с языковой моделью. Её можно подключить в настройках, вкладка «Модель»",
+                       vocal=True)
             _finish(text, None)
             return
         plan = ask_gemma(text)
