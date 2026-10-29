@@ -110,8 +110,9 @@ namespace ClawVoice
                     }));
                     test.Click += async (_, _) =>
                     {
-                        heard.Text = "Говори…";
-                        string r = await Record(4);
+                        test.IsEnabled = false;
+                        string r = await Record(4, s => heard.Text = s);
+                        test.IsEnabled = true;
                         heard.Text = r.StartsWith("!") ? "Не получилось: " + r[1..] : r.Length == 0 ? "Ничего не услышала. Проверь микрофон"
                                    : $"Услышала: «{r}»";
                     };
@@ -196,28 +197,35 @@ namespace ClawVoice
             }
         }
 
-        static async Task<string> Record(int sec)
+        /// <summary>Records through dictate.py (UDP 47323). UDP "connection reset" means nobody listens yet: right
+        /// after the microphone is changed dictate.py restarts, and on a CPU (AMD) the model takes 10-20 s to load,
+        /// so keep asking for up to 40 s before calling it not running.</summary>
+        static async Task<string> Record(int sec, Action<string> status)
         {
-            try
+            var until = DateTime.Now.AddSeconds(40);
+            while (true)
             {
-                using var udp = new UdpClient(0, AddressFamily.InterNetwork);
-                byte[] req = Encoding.UTF8.GetBytes($"{{\"cmd\":\"record\",\"sec\":{sec}}}");
-                await udp.SendAsync(req, req.Length, new IPEndPoint(IPAddress.Loopback, 47323));
-                var recv = udp.ReceiveAsync();
-                if (await Task.WhenAny(recv, Task.Delay(sec * 1000 + 15000)) != recv) return "!диктовка ещё запускается, попробуй через минуту";
-                var j = JsonNode.Parse(Encoding.UTF8.GetString(recv.Result.Buffer))!;
-                return j["error"] is { } e ? "!" + e : ((string?)j["text"] ?? "").Trim();
+                try
+                {
+                    status("Говори…");
+                    using var udp = new UdpClient(0, AddressFamily.InterNetwork);
+                    byte[] req = Encoding.UTF8.GetBytes($"{{\"cmd\":\"record\",\"sec\":{sec}}}");
+                    await udp.SendAsync(req, req.Length, new IPEndPoint(IPAddress.Loopback, 47323));
+                    var recv = udp.ReceiveAsync();
+                    if (await Task.WhenAny(recv, Task.Delay(sec * 1000 + 15000)) != recv) return "!диктовка ещё запускается, попробуй через минуту";
+                    var j = JsonNode.Parse(Encoding.UTF8.GetString(recv.Result.Buffer))!;
+                    return j["error"] is { } e ? "!" + e : ((string?)j["text"] ?? "").Trim();
+                }
+                catch (Exception e) when (e is SocketException { SocketErrorCode: SocketError.ConnectionReset } ||
+                                          e.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionReset })
+                {
+                    if (DateTime.Now > until)
+                        return "!распознавание речи не запустилось. Причина в журнале dictate.log в папке программы";
+                    status("Распознавание ещё запускается, подожди несколько секунд…");
+                    await Task.Delay(2000);
+                }
+                catch (Exception e) { return "!" + e.Message; }
             }
-            catch (SocketException e) when (e.SocketErrorCode == SocketError.ConnectionReset)
-            {
-                // UDP "connection reset" = nobody listens on the port: dictate.py is not running (crashed or no model)
-                return "!распознавание речи не запущено. Причина в журнале dictate.log в папке программы";
-            }
-            catch (AggregateException e) when (e.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionReset })
-            {
-                return "!распознавание речи не запущено. Причина в журнале dictate.log в папке программы";
-            }
-            catch (Exception e) { return "!" + e.Message; }
         }
 
         void Finish()
