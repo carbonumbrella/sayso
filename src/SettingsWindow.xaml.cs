@@ -25,6 +25,7 @@ namespace ClawVoice
         public SettingsWindow()
         {
             InitializeComponent();
+            Responsive.Attach(this, 900, PagesScroll, TabsGrid);  // portrait Claw: one column, scrolling, centered
             TitleBar.MouseLeftButtonDown += (_, e) => { if (e.ButtonState == MouseButtonState.Pressed) DragMove(); };
             CloseBtn.Click += (_, _) => Hide();
             Closing += (_, e) => { e.Cancel = true; Hide(); };

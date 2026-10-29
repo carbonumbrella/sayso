@@ -18,7 +18,7 @@
 
       <!-- tabs: the Claw screen at 175% has little height, so one page at a time -->
       <Border Style="{StaticResource SegBox}" Margin="0,12,0,4">
-        <UniformGrid Rows="1">
+        <UniformGrid x:Name="TabsGrid" Rows="1">
           <RadioButton x:Name="TabMain" Content="Основное" GroupName="tab" Style="{StaticResource Seg}" IsChecked="True"/>
           <RadioButton x:Name="TabVoice" Content="Голос" GroupName="tab" Style="{StaticResource Seg}"/>
           <RadioButton x:Name="TabModel" Content="Модель" GroupName="tab" Style="{StaticResource Seg}"/>
@@ -29,6 +29,8 @@
         </UniformGrid>
       </Border>
 
+      <!-- scrolls only when the screen is short (Claw in portrait); Responsive.cs sets its MaxHeight -->
+      <ScrollViewer x:Name="PagesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Style="{StaticResource Pages}">
       <Grid>
         <!-- ================= main ================= -->
         <Grid x:Name="PageMain">
@@ -320,6 +322,7 @@
           </StackPanel>
         </Grid>
       </Grid>
+      </ScrollViewer>
     </StackPanel>
   </Border>
 </Window>

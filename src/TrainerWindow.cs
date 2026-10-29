@@ -31,6 +31,7 @@ namespace ClawVoice
         public TrainerWindow()
         {
             Title = "Тренировка имени"; Width = 620; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
+            Responsive.Attach(this, 620);  // re-centered and width-capped on rotation
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent;
             WindowStartupLocation = WindowStartupLocation.CenterScreen; Topmost = true;
             FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI"); FontSize = 14;

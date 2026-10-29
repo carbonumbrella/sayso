@@ -78,9 +78,15 @@ namespace ClawVoice
             app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("pack://application:,,,/SaySo;component/Theme.xaml") });
             Theme.Apply(app.Resources);
             Window w;
+            bool narrow = tab.EndsWith(":narrow");  // "main:narrow": the portrait Claw layout, 690 DIP wide
+            tab = tab.Replace(":narrow", "");
             if (tab == "trainer") w = new TrainerWindow();
             else if (tab == "wizard") w = new WizardWindow();
-            else { var s = new SettingsWindow(); s.Reload(); s.ShowTab(tab); w = s; }
+            else
+            {
+                var s = new SettingsWindow(); s.Reload(); s.ShowTab(tab); w = s;
+                if (narrow) { Responsive.Preview(s, true, s.TabsGrid); s.Width = 690; }
+            }
             var root = (FrameworkElement)w.Content;
             w.Content = null;
             var holder = new Border { Background = System.Windows.Media.Brushes.DimGray, Child = root, Width = w.Width };

@@ -278,4 +278,43 @@
       </Setter.Value>
     </Setter>
   </Style>
+
+  <!-- page scroller: a thin rounded bar instead of the classic gray one (shows only when the screen is short) -->
+  <Style x:Key="ThinThumb" TargetType="Thumb">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Thumb">
+          <Border CornerRadius="3" Background="{DynamicResource Ghost}"/>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style x:Key="ThinBar" TargetType="ScrollBar">
+    <Setter Property="Width" Value="6"/><Setter Property="MinWidth" Value="6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ScrollBar">
+          <Track x:Name="PART_Track" IsDirectionReversed="True">
+            <Track.Thumb><Thumb Style="{StaticResource ThinThumb}"/></Track.Thumb>
+          </Track>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style x:Key="Pages" TargetType="ScrollViewer">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ScrollViewer">
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <ScrollContentPresenter/>
+            <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Column="1" Style="{StaticResource ThinBar}" Margin="6,0,0,0"
+                       Value="{TemplateBinding VerticalOffset}" Maximum="{TemplateBinding ScrollableHeight}"
+                       ViewportSize="{TemplateBinding ViewportHeight}"
+                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
 </ResourceDictionary>
