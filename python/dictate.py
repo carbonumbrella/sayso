@@ -35,12 +35,32 @@ def _pick_device():
     want = (os.environ.get("DICTATE_DEVICE") or _vs.get("stt_device") or "auto").upper()
     try:
         import openvino as _ov
-        have = _ov.Core().available_devices
+        core = _ov.Core()
+        # Intel only: OpenVINO also lists an AMD Radeon iGPU as "GPU" (MSI Claw A8), and loading Whisper on it
+        # killed the process with no Python error at all, so it restarted in a loop
+        have = [d for d in core.available_devices
+                if d.startswith("CPU") or "intel" in str(core.get_property(d, "FULL_DEVICE_NAME")).lower()]
     except Exception:
         have = ["CPU"]
+    crashed = _crashed_on()
+    if crashed and want == "AUTO":  # (a device chosen in Settings is tried again)
+        print(f"the last start died while loading Whisper on {crashed}: skipping it", flush=True)
+        have = [d for d in have if not d.startswith(crashed)] or ["CPU"]
     if want != "AUTO" and any(d.startswith(want) for d in have):
         return want
     return next((d for d in ("NPU", "GPU", "CPU") if any(h.startswith(d) for h in have)), "CPU")
+
+
+# A native crash inside WhisperPipeline() cannot be caught: the device is noted before loading and cleared
+# after it, so a note left behind means the previous start died there and that device is skipped.
+LOADING_FILE = os.path.join(HERE, "stt_loading.txt")
+
+
+def _crashed_on():
+    try:
+        return open(LOADING_FILE).read().strip() or None
+    except OSError:
+        return None
 
 
 def _model_for(device):
@@ -76,6 +96,10 @@ HOTKEYS = voice_settings.hotkeys()
 user32 = ctypes.windll.user32
 
 print(f"loading Whisper on {DEVICE} ...", flush=True)
+_noted = DEVICE != "CPU" and not _crashed_on()
+if _noted:
+    with open(LOADING_FILE, "w") as _f:
+        _f.write(DEVICE)
 try:
     pipe = ov_genai.WhisperPipeline(MODEL, DEVICE, CACHE_DIR=os.path.join(HERE, "npu_cache"))
 except Exception as e:  # an old NPU/GPU driver: fall back instead of leaving the user without dictation
@@ -89,6 +113,8 @@ except Exception as e:  # an old NPU/GPU driver: fall back instead of leaving th
             print(f"Whisper on {DEVICE} failed too ({e2!r})", flush=True)
     else:
         raise
+if _noted:  # loaded: not a crash. A note we skipped (previous crash) stays, the uninstaller removes it
+    os.remove(LOADING_FILE)
 print(f"Whisper {os.path.basename(MODEL)} on {DEVICE}, language {LANG or 'auto'}", flush=True)
 whisper_lock = threading.Lock()  # hotkey recordings and the wake listener share one pipeline
 LISTEN_FILE = os.path.join(HERE, "listen_state.txt")

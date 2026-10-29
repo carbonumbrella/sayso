@@ -208,6 +208,15 @@ namespace ClawVoice
                 var j = JsonNode.Parse(Encoding.UTF8.GetString(recv.Result.Buffer))!;
                 return j["error"] is { } e ? "!" + e : ((string?)j["text"] ?? "").Trim();
             }
+            catch (SocketException e) when (e.SocketErrorCode == SocketError.ConnectionReset)
+            {
+                // UDP "connection reset" = nobody listens on the port: dictate.py is not running (crashed or no model)
+                return "!распознавание речи не запущено. Причина в журнале dictate.log в папке программы";
+            }
+            catch (AggregateException e) when (e.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionReset })
+            {
+                return "!распознавание речи не запущено. Причина в журнале dictate.log в папке программы";
+            }
             catch (Exception e) { return "!" + e.Message; }
         }
 
