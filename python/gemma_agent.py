@@ -1165,6 +1165,41 @@ def xbox_route(p):
     return None
 
 
+# Our own tray apps: launching one again opens its window (SaySo, ClawAmbilight, kbdhaptic all forward to the
+# running copy). Spoken as "настройки подсветки" or "открой хаптик".
+OWN_APPS = [("sayso", r"сейсо|сей со|sayso|say so|помощник\w*|ассистент\w*|мурмур\w*", "SaySo"),
+            ("ambilight", r"подсветк\w*|амбилайт\w*|ambilight", "подсветки"),
+            ("kbdhaptic", r"хаптик\w*|хэптик\w*|кбд ?хаптик\w*|kbd ?haptic|вибрац\w*|вибро\w*", "kbdhaptic")]
+
+
+def own_app_exe(key):
+    local = os.environ.get("LOCALAPPDATA", "")
+    if key == "sayso":
+        paths = [os.path.join(HERE, "app", "SaySo.exe")]
+    elif key == "ambilight":
+        paths = [os.path.join(local, "Programs", "ClawAmbilight", "ClawAmbilight.exe")]
+    else:
+        rc, out = _ps_out("(Get-Process kbdhaptic -ErrorAction SilentlyContinue | Select-Object -First 1).Path")
+        paths = [out.strip(), os.path.join(local, "kbdhaptic", "kbdhaptic.exe"), r"C:\AI\kbd-haptic\kbdhaptic.exe"]
+    return next((f for f in paths if f and os.path.isfile(f)), None)
+
+
+def own_app_route(p):
+    for key, words, name in OWN_APPS:
+        if re.search(rf"\b(?:настройк\w*|параметр\w*)\s+(?:\w+\s+)?(?:{words})", p) or re.match(
+                rf"(?:открой|покажи|запусти)\s+(?:мне\s+)?(?:{words})\s*$", p):
+            return open_own_app(key, name)
+    return None
+
+
+def open_own_app(key, name):
+    exe = own_app_exe(key)
+    if not exe:
+        return f"Не нашла программу {name}", True
+    subprocess.Popen([exe] + (["--settings"] if key == "sayso" else []))
+    return f"Открываю настройки {name}", False
+
+
 def window(action):
     if action == "minimize_all":
         _key(0x5B, 0x44)  # Win+D
@@ -2110,7 +2145,7 @@ HELP_FULL = """🎙 SaySo: голосовой помощник
 ✍️ Свои команды: настройки → «Команды» (открыть сайт, программу, нажать клавиши, webhook)
 🔊 Система: громкость / яркость N, громче, тише · звук, микрофон, ночной свет вкл/выкл · пауза, следующий трек · сверни окна · заблокируй · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox
 ℹ️ Инфо: время · дата · заряд · диск · память · процессор · IP
-📂 Программы: открой / закрой любую программу или игру · открой ютуб · настройки блютуз · обнови список приложений · найди файл … (по всему диску) · скопируй найденный файл · отправь этот файл в телеграм · открой найденный файл
+📂 Программы: открой / закрой любую программу или игру · открой ютуб · настройки блютуз · настройки SaySo / подсветки / kbdhaptic · обнови список приложений · найди файл … (по всему диску) · скопируй найденный файл · отправь этот файл в телеграм · открой найденный файл
 ❓ Помощь: что ты умеешь · список команд · что ты умеешь с файлами (команды по теме) · отправь список команд в телеграм
 📸 Скриншоты (в «Изображения → Снимки экрана» и в буфер): скриншот · скриншот окна · скриншот области · открой папку скриншотов
 📨 Telegram: скриншот в телеграм · напиши в телеграм … · отправь файл / последнее фото / скачанный файл
@@ -2339,6 +2374,9 @@ def command_route(p, text):
     xb = xbox_route(p)  # ahead of plugins: ClawTweaks' "режим Xbox" toggle needs its helper running
     if xb:
         return xb
+    own = own_app_route(p)  # ahead of plugins: "настройки подсветки" must not switch the LEDs on
+    if own:
+        return own
     return plugins.route("before", p, text) or fast_route(p) or plugins.route("after", p, text)
 
 

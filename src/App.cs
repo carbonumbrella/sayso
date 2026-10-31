@@ -55,6 +55,7 @@ namespace ClawVoice
             if (!first)  // already running: forward the command, or open its settings
             {
                 if (Array.IndexOf(args, Autostart.Arg) >= 0) return;
+                Responsive.AllowForeground();
                 if (EventWaitHandle.TryOpenExisting(command != null ? "Local\\SaySo." + command : ShowEvent, out var s)) s.Set();
                 return;
             }
@@ -287,8 +288,7 @@ namespace ClawVoice
         {
             _settings ??= new SettingsWindow();
             _settings.Reload();
-            _settings.Show();
-            _settings.Activate();
+            Responsive.BringToFront(_settings);
         }
 
         public void ShowCommands()

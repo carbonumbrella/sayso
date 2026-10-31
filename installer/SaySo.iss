@@ -1,4 +1,4 @@
-﻿; SaySo installer (Inno Setup 6). Per-user, no admin for the files; one UAC prompt only for the elevated
+; SaySo installer (Inno Setup 6). Per-user, no admin for the files; one UAC prompt only for the elevated
 ; hotkey task. The installer ships code only: bootstrap.ps1 installs Python + packages (uv) and downloads the
 ; Whisper model for this PC (NPU > Intel GPU > CPU), so the setup file stays small.
 ; Build: build.cmd (stages the Python files from PYSRC, default C:\AI\openvino-npu).
@@ -7,7 +7,7 @@
 #define AppName "SaySo"
 #define RuntimeUrl "https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe"
 #ifndef AppVersion
-  #define AppVersion "0.3.6"
+  #define AppVersion "0.3.7"
 #endif
 #ifndef Stage
   #define Stage "..\publish\stage"

@@ -18,6 +18,7 @@ for name in ["set_location", "where_am_i", "weather", "wikipedia", "web_answer",
         return _n
     setattr(g.net_skills, name, stub)
 g.plugins.REG["modules"]["ambilight"].ambilight = lambda p: calls.append(("ambilight", (), {})) or ("amb", False)
+g.open_own_app = lambda key, name: calls.append(("own_app", (key,), {})) or ("own", False)
 g.usercmd.items = lambda: []  # the user's own command file must not change routing tests
 g.running_process = lambda n: "aimp" if "имп" in n or "imp" in n else None
 g._paste_text = lambda t: (calls.append(("type", (t,), {})), g.note_typed())
@@ -51,6 +52,14 @@ CASES = [  # phrase, expected first call name, expected args/kwargs subset (or N
     ("следующий трек", "media", ("next",)),
     ("открой настройки блютуз", "open_settings", None),
     ("сверни все окна", "window", ("minimize_all",)),
+    ("настройки подсветки", "own_app", ("ambilight",)),
+    ("открой настройки подсветки", "own_app", ("ambilight",)),
+    ("открой подсветку", "own_app", ("ambilight",)),
+    ("настройки хаптика", "own_app", ("kbdhaptic",)),
+    ("открой настройки вибрации", "own_app", ("kbdhaptic",)),
+    ("настройки сейсо", "own_app", ("sayso",)),
+    ("покажи настройки помощника", "own_app", ("sayso",)),
+    ("включи подсветку", "ambilight", None),
     ("сколько времени", "system_info", ("time",)),
     ("какой сегодня день", "system_info", ("date",)),
     ("сколько заряда у батареи", "system_info", ("battery",)),

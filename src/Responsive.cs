@@ -14,6 +14,24 @@ namespace ClawVoice
     /// and on every display change (rotation, resolution, scale).</summary>
     public static class Responsive
     {
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int processId);
+
+        /// <summary>A second launch that only signals the running copy hands it the right to take the foreground.</summary>
+        public static void AllowForeground() => AllowSetForegroundWindow(-1);
+
+        /// <summary>Shows a tray app's window in front of everything, also over the full-screen Xbox shell (a plain
+        /// Show + Activate from the background can stay behind it). Topmost only until the user leaves the window.</summary>
+        public static void BringToFront(Window w)
+        {
+            w.Show();
+            if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
+            w.Topmost = true;
+            w.Activate();
+            EventHandler? off = null;
+            off = (_, _) => { w.Topmost = false; w.Deactivated -= off; };
+            w.Deactivated += off;
+        }
+
         public static void Attach(Window w, double designWidth, ScrollViewer? scroller = null, UniformGrid? tabs = null)
         {
             var moved = new List<(Grid grid, UIElement child)>();
