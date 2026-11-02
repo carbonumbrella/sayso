@@ -7,7 +7,7 @@
 #define AppName "SaySo"
 #define RuntimeUrl "https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe"
 #ifndef AppVersion
-  #define AppVersion "0.3.8"
+  #define AppVersion "0.3.9"
 #endif
 #ifndef Stage
   #define Stage "..\publish\stage"
@@ -39,6 +39,7 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "autostart"; Description: "Запускать SaySo вместе с Windows"; Flags: checkedonce
 Name: "hotkeys"; Description: "Кнопки работают и поверх окон администратора (один запрос UAC)"; Flags: checkedonce
+Name: "desktopicon"; Description: "Ярлык на рабочем столе"; Flags: checkedonce
 
 [Files]
 Source: "{#Stage}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -50,6 +51,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Icons]
 Name: "{userprograms}\SaySo"; Filename: "{app}\app\SaySo.exe"; Parameters: "--settings"
+Name: "{userdesktop}\SaySo"; Filename: "{app}\app\SaySo.exe"; Parameters: "--settings"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\app\SaySo.exe"; Parameters: "--set-autostart on"; Tasks: autostart; Flags: runhidden waituntilterminated

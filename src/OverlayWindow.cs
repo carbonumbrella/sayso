@@ -140,7 +140,7 @@ namespace ClawVoice
                 bool on = m.Kind == "mic";
                 if (on && !_shown)
                 {
-                    ShowMessage(new Msg { Kind = "listen", Title = "Gemma", Text = "Слушаю…", Ms = m.Ms });
+                    ShowMessage(new Msg { Kind = "listen", Title = m.Title, Text = "Слушаю…", Ms = m.Ms });
                     return;  // the listen card pulses itself; no badge on a card that only says "Слушаю…"
                 }
                 _micBadge.Visibility = on && _shown ? Visibility.Visible : Visibility.Collapsed;

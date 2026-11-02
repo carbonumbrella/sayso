@@ -300,9 +300,13 @@ OVERLAY_EXE = os.path.join(HERE, "overlay", "bin", "publish", "ClawOverlay.exe")
 _ov_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
-def ov(kind, text="", title="Gemma", ms=0):
+def assistant_title():
+    return voice_settings.get("assistant_name") or "Мурмур"
+
+
+def ov(kind, text="", title=None, ms=0):
     """State pill in ClawOverlay ("Слушаю…" while the button is held). Fire-and-forget UDP."""
-    msg = json.dumps({"kind": kind, "title": title, "text": text, "ms": ms}, ensure_ascii=False)
+    msg = json.dumps({"kind": kind, "title": title or assistant_title(), "text": text, "ms": ms}, ensure_ascii=False)
     try:
         _ov_sock.sendto(msg.encode("utf-8"), ("127.0.0.1", 47330))
     except OSError:
@@ -356,7 +360,7 @@ def set_listening(on):
     if not on:
         msg = "Слушание выключено. Зови кнопкой."
     elif on_ac():
-        msg = "Слушаю. Скажи: привет, Гемма."
+        msg = f"Слушаю. Скажи: привет, {assistant_title()}."
     else:
         msg = "Слушание включено, заработает от зарядки."
     print(f"listening {'on' if on else 'off'}", flush=True)
@@ -529,7 +533,7 @@ def start(m="paste"):
             open_mic()  # cold mic (battery): 0.1-2 s to wake
         beep(BEEP_START)  # after the mic is live, so the beep means "speak now"
         threading.Thread(target=lambda: agent().stop_speaking(), daemon=True).start()  # pressing talks over the voice
-        ov("listen", "Слушаю…", "Gemma" if m == "agent" else "Диктовка")
+        ov("listen", "Слушаю…", None if m == "agent" else "Диктовка")
         recording = True
         session += 1
         sid = session
@@ -547,7 +551,7 @@ def stop():
             close_mic()
         audio = np.concatenate(chunks) if chunks else np.zeros(0, np.float32)
     beep(BEEP_STOP)
-    ov("think", "Распознаю…", "Gemma" if mode == "agent" else "Диктовка")
+    ov("think", "Распознаю…", None if mode == "agent" else "Диктовка")
     threading.Thread(target=transcribe, args=(audio, mode), daemon=True).start()
 
 

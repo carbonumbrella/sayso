@@ -140,4 +140,24 @@ for phrase in GEMMA:
     r = g.command_route(phrase, phrase)
     bad += r is not None
     print(("ok  " if r is None else "FAIL"), phrase, "-> goes to Gemma" if r is None else f"-> fast {r}")
+
+# the card's caption follows the assistant's name; a screenshot hides the card before the grab
+sent = []
+g.overlay_running = lambda: True
+real_sock, real_get = g._ov_sock, g.voice_settings.get
+g._ov_sock = type("S", (), {"sendto": staticmethod(lambda data, addr: sent.append(g.json.loads(data.decode("utf-8"))))})()
+g.voice_settings.get = lambda key: "Вася" if key == "assistant_name" else real_get(key)
+g.report("готово")
+g.report("плохо", ok=False)
+g.notify("таймер", "Таймер", kind="info")
+titles = [m["title"] for m in sent]
+ok = titles == ["Вася", "Вася: ошибка", "Таймер"] and sent[1]["kind"] == "error"
+bad += not ok
+print(("ok  " if ok else "FAIL"), "card captions ->", titles)
+sent.clear()
+g.hide_overlay_for_shot()
+ok = [m["kind"] for m in sent] == ["hide"]
+bad += not ok
+print(("ok  " if ok else "FAIL"), "screenshot hides the card ->", sent)
+g._ov_sock, g.voice_settings.get = real_sock, real_get
 print("FAILED:", bad)

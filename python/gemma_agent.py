@@ -122,16 +122,22 @@ def overlay_running():
     return bool(h)
 
 
-def overlay(kind, text="", title="Gemma", ms=0):
+def assistant_title():
+    """The card's caption: the assistant's current name, it can change at any time in the settings."""
+    return voice_settings.get("assistant_name") or "Мурмур"
+
+
+def overlay(kind, text="", title=None, ms=0):
     """Instant on-screen message (overlay/ClawOverlay.exe). False when the overlay is not running."""
     if not overlay_running():
         return False
-    msg = {"kind": kind, "title": title, "text": text, "ms": ms}
+    msg = {"kind": kind, "title": title or assistant_title(), "text": text, "ms": ms}
     _ov_sock.sendto(json.dumps(msg, ensure_ascii=False).encode("utf-8"), ("127.0.0.1", OVERLAY_PORT))
     return True
 
 
-def notify(text, title="Gemma", kind=None, ms=0):
+def notify(text, title=None, kind=None, ms=0):
+    title = title or assistant_title()
     # own overlay first: Windows toasts queue, animate slowly and are hidden by Do Not Disturb / in games
     if overlay(kind or ("error" if "ошибка" in title else "ok"), text, title, ms):
         return
@@ -196,7 +202,7 @@ def warm():
 
 def report(text, ok=True, vocal=False):
     log(("OK: " if ok else "FAIL: ") + text)
-    notify(text, "Gemma" if ok else "Gemma: ошибка")
+    notify(text, assistant_title() if ok else f"{assistant_title()}: ошибка")
     if vocal:
         speak(text)
 
@@ -570,9 +576,16 @@ def _image_to_clipboard(img):
         user32.CloseClipboard()
 
 
+def hide_overlay_for_shot():
+    """The command's own card must not get into the picture: wait out its 160 ms fade and the next screen frames."""
+    if overlay("hide"):
+        time.sleep(0.3)
+
+
 def screenshot(window=False):
     """Save to the system Screenshots folder and (setting screenshot_clipboard) copy to the clipboard."""
     from PIL import ImageGrab
+    hide_overlay_for_shot()
     os.makedirs(SHOTS, exist_ok=True)
     stem = os.path.join(SHOTS, datetime.now().strftime("Снимок экрана %Y-%m-%d %H%M%S"))
     path, n = stem + ".png", 1
@@ -1240,7 +1253,7 @@ def power(action, delay=0):
 def run_command(command):
     if not command.strip():
         return "Не поняла, какую команду выполнить"
-    if not confirm("Выполнить команду?", "Gemma предлагает выполнить команду PowerShell.", command, ok="Выполнить"):
+    if not confirm("Выполнить команду?", f"{assistant_title()} предлагает выполнить команду PowerShell.", command, ok="Выполнить"):
         return "Команда отменена"
     rc, out = _ps_fresh(command)
     log(f"run_command rc={rc}: {out[:500]}")
@@ -1335,7 +1348,9 @@ def fast_route(p):
             os.startfile(SHOTS)
             return "Папка скриншотов", False
         if re.search(r"област|част\w* экрана|выдел|фрагмент|кусо?к", p):
+            hide_overlay_for_shot()
             _key(0x5B, 0x10, 0x53)  # Win+Shift+S: Windows' own snip, it saves to the same folder
+            time.sleep(0.6)  # the snip freezes the screen a moment later: the reply card must come after that
             return "Выдели область", False
         win_only = bool(re.search(r"\bокн", p))  # (not "window": that local hid window() for "сверни окна")
         clip = " и скопирован в буфер" if voice_settings.get("screenshot_clipboard") else ""
