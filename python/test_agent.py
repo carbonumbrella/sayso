@@ -63,6 +63,8 @@ CASES = [  # phrase, expected first call name, expected args/kwargs subset (or N
     ("подсветка только кнопки", "ambilight", ()),
     ("только кнопки", "ambilight", ()),
     ("подсветка только кнопки красным", "ambilight", ()),
+    ("подсветка кнопки", "ambilight", ()),
+    ("подсветка кнопки красный", "ambilight", ()),
     ("сколько времени", "system_info", ("time",)),
     ("какой сегодня день", "system_info", ("date",)),
     ("сколько заряда у батареи", "system_info", ("battery",)),
