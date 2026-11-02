@@ -10,6 +10,18 @@ AMBI_CFG = os.path.join(os.environ["APPDATA"], "ClawAmbilight", "settings.json")
 AMBI_COLORS = [(r"красн", "#FF3B30"), (r"оранж", "#FF9500"), (r"жёлт|желт", "#FFCC00"), (r"зел[её]н", "#34C759"),
                (r"бирюз|голуб", "#00C7BE"), (r"син", "#3E7BFA"), (r"фиолет|сиренев", "#AF52DE"),
                (r"розов|малин", "#FF2D55"), (r"бел", "#FFFFFF")]
+AMBI_BUTTONS = r"кноп(?:к|ок)|\babxy\b"  # only the ABXY light, the sticks dark
+
+
+def ambi_too_old():
+    """The buttons mode came in 0.9.9: an older app fails to read the settings and falls back to its defaults."""
+    if not os.path.exists(AMBI_EXE):
+        return False
+    rc, out = A._ps_out("(Get-Item '%s').VersionInfo.FileVersion" % AMBI_EXE.replace("'", "''"))
+    try:
+        return tuple(int(x) for x in out.strip().split(".")[:3]) < (0, 9, 9)
+    except ValueError:
+        return False
 
 
 def ambilight(p):
@@ -29,7 +41,13 @@ def ambilight(p):
         left = re.search(r"лев\w*[\s,-]+(?:стик\w*[\s,-]+)?(?:и[\s,-]+)?(\w+)", p)
         right = re.search(r"прав\w*[\s,-]+(?:стик\w*[\s,-]+)?(?:и[\s,-]+)?(\w+)", p)
         side = lambda m: m and next((h for pat, h in AMBI_COLORS if re.search(pat, m.group(1))), None)
-        if re.search(r"нинтендо|nintendo|джой ?кон|joy-?con|свитч|switch", p):
+        if re.search(AMBI_BUTTONS, p):
+            if ambi_too_old():
+                return "Для режима только кнопки обнови ClawAmbilight до версии 0.9.9", False
+            cfg["mode"], say = "buttons", "Светятся только кнопки"
+            if color:
+                cfg["buttonsColor"] = color
+        elif re.search(r"нинтендо|nintendo|джой ?кон|joy-?con|свитч|switch", p):
             cfg.update(mode="static", staticLeft="#0AB9E6", staticRight="#FF3C28")
             say = "Подсветка как у Joy-Con"
         elif side(left) or side(right):
@@ -72,7 +90,7 @@ BACKLIGHT = (r"подсвет|посветк|пациентк|по\s?цвет|п
 
 
 def route(p, text):
-    if re.search(BACKLIGHT + "|" + SIDE_COLOR, p) and not re.search(r"ночн\w* (свет|режим)", p):
+    if re.search(BACKLIGHT + "|" + SIDE_COLOR + r"|только кнопк", p) and not re.search(r"ночн\w* (свет|режим)", p):
         return ambilight(p)
     return None
 
@@ -86,4 +104,4 @@ def register(api):
     api.route(route, "before")
     api.tool("ambilight", '{"what": str}', "подсветка стиков Claw: вкл/выкл, цвет, режим, яркость",
              lambda args, phrase: ambilight(phrase.lower()))
-    api.help("🌈 Подсветка: вкл/выкл · мягкая / яркая · красным · как у нинтендо · левый … правый … · яркость N")
+    api.help("🌈 Подсветка: вкл/выкл · мягкая / яркая · только кнопки · красным · как у нинтендо · левый … правый … · яркость N")
