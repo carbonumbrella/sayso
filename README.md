@@ -1,5 +1,9 @@
 # SaySo
 
+[![release](https://img.shields.io/github/v/release/carbonumbrella/sayso?include_prereleases&label=release)](https://github.com/carbonumbrella/sayso/releases)
+
+**[Скачать последнюю версию](https://github.com/carbonumbrella/sayso/releases)**
+
 Голосовой помощник для Windows: диктовка в любое окно и голосовые команды. Помощника зовут Мурмур, имя можно сменить. Речь распознаётся прямо на компьютере (Whisper через OpenVINO, лучше всего на Intel NPU), без облака.
 
 - **Диктовка:** держи кнопку, говори, отпусти, и текст появится там, где курсор. Пока диктуешь, его можно править голосом: «удали слово», «новая строка», «замени … на …».
