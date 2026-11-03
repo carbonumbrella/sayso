@@ -258,7 +258,11 @@ def main(argv):
         if cmd == "download":
             return out(download(args[0] if args else "auto"))
         if cmd == "setup":  # setup <full|minimal> <auto|small|turbo>: the installer's choices
-            voice_settings.put("assistant", args[0] != "minimal")
+            # every update runs this again: "minimal" turns the assistant off only on a fresh profile, never one the
+            # user has turned on since (each update over a minimal install switched it off again)
+            fresh = "assistant" not in voice_settings.load_raw()
+            if args[0] != "minimal" or fresh:
+                voice_settings.put("assistant", args[0] != "minimal")
             if len(args) > 1 and args[1] in ("small", "turbo"):  # auto keeps the user's earlier choice
                 voice_settings.put("stt_model", args[1])
             return out({"ok": True})

@@ -154,7 +154,12 @@ namespace ClawVoice
             if (page == PageCmd) CmdFill();
             if (page == PagePlug) PlugFill();
             if (page == PageSys) { LoadSysPage(); _ = FillModels(); }
-            if (page == PageTg) TgStatus.Text = Read()["telegram_chat_id"] is { } id ? $"Привязан чат {id}" : "Бот ещё не привязан";
+            if (page == PageTg)
+            {
+                var id = Read()["telegram_chat_id"];
+                TgChatBox.Text = id?.ToString() ?? "";
+                TgStatus.Text = id is not null ? $"Привязан чат {id}" : "Бот ещё не привязан";
+            }
         }
 
         public void ShowTab(string name)
@@ -214,6 +219,7 @@ namespace ClawVoice
             (prov == "none" ? ProvNone : prov == "server" ? ProvServer : prov == "cloud" ? ProvCloud : ProvNpu).IsChecked = true;
             UrlBox.Text = (string?)llm["url"] ?? "";
             ModelBox.Text = (string?)llm["model"] ?? "";
+            ShowModelNow();
             KeyBox.Password = "";
             ModelFields();
             CityNow.Text = "Сейчас: " + CurrentCity();
@@ -482,9 +488,31 @@ namespace ClawVoice
             bool unlocked = !AssistantOn;
             Set("assistant", true);  // a dictation-only install gets the assistant once a variant is chosen here
             Gate();
+            ShowModelNow();
             ModelStatus.Text = "Сохранено. " + (unlocked ? "Помощник включён. " : "") +
                                (prov == "npu" ? "Gemma включается тумблером на вкладке «Основное»." : "");
             if (prov != "npu" && Stack.GemmaWanted) Task.Run(() => AppRef.SetGemma(false));  // free the NPU memory
+        }
+
+        /// <summary>The saved variant as a green "✓ Подключено: …" box (grey for "Без модели"), so the tab shows what
+        /// works now, not only the draft choice of the segment.</summary>
+        void ShowModelNow()
+        {
+            var s = Read();
+            var llm = s["llm"] as JsonObject ?? new JsonObject();
+            string prov = (string?)llm["provider"] ?? "none", model = (string?)llm["model"] ?? "";
+            bool on = prov != "none" && AssistantOn;
+            string dev = ((string?)s["llm_device"] ?? "auto") switch { "NPU" => "NPU", "GPU" => "видеокарта", "CPU" => "процессор", _ => "авто" };
+            ModelNow.Text = !AssistantOn ? "Помощник выключен: установлена только диктовка"
+                : prov == "cloud" ? $"✓  Подключено: облако, {(model.Length > 0 ? model : "модель не указана")}"
+                : prov == "server" ? $"✓  Подключено: свой сервер, {(model.Length > 0 ? model : (string?)llm["url"] ?? "")}"
+                : prov == "npu" ? $"✓  Подключено: Gemma на этом компьютере ({dev}), {(App.GemmaLoaded ? "загружена" : Stack.GemmaWanted ? "загружается" : "выгружена")}"
+                : "Без модели: команды работают, свободного разговора нет";
+            var green = System.Windows.Media.Color.FromRgb(0x3F, 0xB9, 0x6E);
+            ModelNow.Foreground = on ? new System.Windows.Media.SolidColorBrush(green) : (System.Windows.Media.Brush)FindResource("Sub");
+            ModelNowBox.BorderBrush = on ? new System.Windows.Media.SolidColorBrush(green) : (System.Windows.Media.Brush)FindResource("Border");
+            ModelNowBox.Background = on ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0x3F, 0xB9, 0x6E))
+                                        : (System.Windows.Media.Brush)FindResource("Card");
         }
 
         async Task TestModel()
@@ -538,14 +566,30 @@ namespace ClawVoice
 
         async Task TgLink()
         {
-            string token = TgTokenBox.Password.Trim();
-            if (token.Length < 20) { TgStatus.Text = "Вставь токен бота от @BotFather"; return; }
-            TgStatus.Text = "Ищу твоё сообщение /start…";
+            string token = TgTokenBox.Password.Trim(), chat = TgChatBox.Text.Trim();
+            if (chat.Length > 0 && !long.TryParse(chat, out _)) { TgStatus.Text = "ID чата это число, например 123456789"; return; }
+            if (token.Length == 0 && chat.Length == 0) { TgStatus.Text = "Вставь токен бота от @BotFather"; return; }
+            if (token.Length > 0 && token.Length < 20) { TgStatus.Text = "Это не похоже на токен бота от @BotFather"; return; }
+            if (chat.Length > 0)  // a known chat id: nothing to wait for
+            {
+                if (token.Length > 0)
+                {
+                    var s = await Task.Run(() => Stack.Cli("secret telegram_token", token));
+                    if (s["error"] is { } e) { TgStatus.Text = "Токен не сохранён: " + e; return; }
+                    TgTokenBox.Password = "";
+                }
+                Set("telegram_chat_id", long.Parse(chat));
+                TgStatus.Text = $"Сохранено: чат {chat}. Нажми «Отправить проверку».";
+                Toast(TgStatus.Text, true);
+                return;
+            }
+            TgStatus.Text = "Жду твоё сообщение боту (до 20 секунд): напиши ему /start или что угодно…";
             var r = await Task.Run(() => Stack.Cli("tg-link " + Stack.Quote(token)));
             TgTokenBox.Password = "";
+            if (r["chat_id"] is { } id) TgChatBox.Text = id.ToString();
             TgStatus.Text = r["error"] is { } err ? "Не получилось: " + err
-                : r["chat_id"] is null ? "Токен сохранён, но бот не видит новых сообщений. Напиши ему сейчас что угодно (например /start) и нажми «Привязать» ещё раз."
-                : $"Привязано: {r["name"]} (чат {r["chat_id"]})";
+                : r["chat_id"] is null ? "Токен сохранён, но сообщения боту не пришло. Напиши ему что угодно и нажми «Привязать» ещё раз, или впиши ID чата вручную."
+                : $"Привязано: {r["name"]} (чат {r["chat_id"]}). ID можно скопировать из поля.";
             Toast(TgStatus.Text, r["error"] is null && r["chat_id"] is not null);
         }
 

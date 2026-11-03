@@ -246,6 +246,10 @@
               <TextBlock Text="ПОМОЩНИК И ЯЗЫКОВАЯ МОДЕЛЬ" Style="{StaticResource Label}" Margin="0"/>
               <local:HelpTip Text="Модель нужна для разговора и необычных команд. Без модели работают команды из «Что умеет», погода, поиск и Википедия, нагрузки нет. Локально: Gemma 3 4B прямо на этом ПК (NPU, видеокарта или процессор), 3.3 ГБ на диске и около 4 ГБ памяти, ничего не уходит в интернет. Свой сервер: Ollama, LM Studio и другие на этом или соседнем ПК, нагрузка там. Облако: Gemini и подобные, быстро и без нагрузки, но фразы для модели уходят в интернет, нужен ключ."/>
             </StackPanel>
+            <!-- what is saved and working now, apart from the choice below (which is only a draft until «Сохранить») -->
+            <Border x:Name="ModelNowBox" CornerRadius="12" Padding="12,8" Margin="0,0,0,8" BorderThickness="1">
+              <TextBlock x:Name="ModelNow" TextWrapping="Wrap" FontWeight="SemiBold"/>
+            </Border>
             <Border Style="{StaticResource SegBox}">
               <UniformGrid Rows="1">
                 <RadioButton x:Name="ProvNone" Content="Без модели" GroupName="prov" Style="{StaticResource Seg}"/>
@@ -328,8 +332,11 @@
             <local:HelpTip Text="По команде помощник присылает в твой личный бот скриншоты, файлы и ответы: «сделай скриншот и отправь в телеграм», «отправь это в телеграм». Бот твой собственный, сообщения идут только в твой чат. Токен хранится зашифрованным и читается только этим пользователем Windows."/>
           </StackPanel>
           <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Sub}" FontSize="12" Margin="4,0,0,8"
-                     Text="1. Создай бота у @BotFather и скопируй токен.  2. Вставь токен ниже.  3. Напиши своему боту /start.  4. Нажми «Привязать»."/>
+                     Text="1. Создай бота у @BotFather и скопируй токен.  2. Вставь токен ниже.  3. Впиши ID чата, если знаешь его. Если нет: напиши боту /start и нажми «Привязать», ID заполнится сам."/>
+          <TextBlock Text="ТОКЕН БОТА (ХРАНИТСЯ ЗАШИФРОВАННЫМ)" Style="{StaticResource Label}"/>
           <PasswordBox x:Name="TgTokenBox" Style="{StaticResource Secret}"/>
+          <TextBlock Text="ID ЧАТА" Style="{StaticResource Label}"/>
+          <TextBox x:Name="TgChatBox" Style="{StaticResource Field}"/>
           <Grid Margin="0,10,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
             <Button x:Name="TgLinkBtn" Content="Привязать" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>

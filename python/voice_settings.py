@@ -101,15 +101,20 @@ def get(key):
     return _cache.get(key, DEFAULTS.get(key))
 
 
-def put(key, value):
-    """Write one setting (used by voice commands like "зови меня ..."); the tray app writes the rest."""
+def load_raw():
+    """The settings file itself, without DEFAULTS: tells a value the user set from one never set."""
     _migrate()
-    os.makedirs(USER_DIR, exist_ok=True)
     try:
         with open(FILE, encoding="utf-8-sig") as f:
-            data = json.load(f)
+            return json.load(f)
     except (OSError, ValueError):
-        data = {}
+        return {}
+
+
+def put(key, value):
+    """Write one setting (used by voice commands like "зови меня ..."); the tray app writes the rest."""
+    os.makedirs(USER_DIR, exist_ok=True)
+    data = load_raw()
     data[key] = value
     tmp = FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
