@@ -32,6 +32,8 @@ namespace ClawVoice
             w.Deactivated += off;
         }
 
+        const double BottomChrome = 40;  // under the scroller: the page margin (20), the frame's border (1) and margin (16)
+
         public static void Attach(Window w, double designWidth, ScrollViewer? scroller = null, UniformGrid? tabs = null)
         {
             var moved = new List<(Grid grid, UIElement child)>();
@@ -51,13 +53,17 @@ namespace ClawVoice
                 w.MaxHeight = wa.Height;
                 if (scroller != null)
                 {
-                    // the window's chrome around the scroller (title, tabs, margins) keeps its height
-                    scroller.MaxHeight = double.PositiveInfinity;
+                    // the window's chrome around the scroller (title, tabs, margins) keeps its height. Measured from where
+                    // the scroller starts, not as window minus scroller: on a page taller than the screen the window was
+                    // already capped, the chrome came out as 0 and the scroller's bottom (a title's height) was cut off
                     w.UpdateLayout();
-                    double chrome = Math.Max(0, w.ActualHeight - scroller.ActualHeight);
-                    scroller.MaxHeight = Math.Max(200, wa.Height - chrome);
+                    double top = scroller.TransformToAncestor(w).Transform(new Point(0, 0)).Y;
+                    scroller.MaxHeight = Math.Max(200, wa.Height - top - BottomChrome);
                 }
                 w.UpdateLayout();
+                if (scroller != null)
+                    Log.Write($"layout: work area {wa.Width:0}x{wa.Height:0}, window {w.ActualWidth:0}x{w.ActualHeight:0} (max {w.MaxHeight:0}), " +
+                              $"scroller {scroller.ActualHeight:0} (max {scroller.MaxHeight:0}, content {scroller.ExtentHeight:0})");
                 w.Left = wa.Left + Math.Max(0, (wa.Width - w.ActualWidth) / 2);
                 w.Top = wa.Top + Math.Max(0, (wa.Height - w.ActualHeight) / 2);
             }
@@ -66,6 +72,14 @@ namespace ClawVoice
             EventHandler onDisplay = (_, _) => Later();
             w.Loaded += (_, _) => Later();
             w.IsVisibleChanged += (_, e) => { if ((bool)e.NewValue) Later(); };
+            // content that arrives later (the models list, folders) makes the window taller from its top edge, and its
+            // bottom slid off the screen: keep it on screen, moving it up as it grows (the scroller caps the rest)
+            w.SizeChanged += (_, e) =>
+            {
+                if (!e.HeightChanged || !w.IsVisible) return;
+                Rect wa = SystemParameters.WorkArea;
+                if (w.Top + w.ActualHeight > wa.Bottom) w.Top = Math.Max(wa.Top, wa.Bottom - w.ActualHeight);
+            };
             SystemEvents.DisplaySettingsChanged += onDisplay;
             w.Closed += (_, _) => SystemEvents.DisplaySettingsChanged -= onDisplay;
         }

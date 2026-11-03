@@ -7,7 +7,8 @@ g.start_apps()  # cache the real Start menu list before _ps_out is stubbed
 
 calls = []
 for name in ["volume", "mic", "brightness", "night_light", "media", "timer", "screenshot", "telegram", "power",
-             "open_settings", "window", "system_info", "power", "open_app", "close_app", "send_file", "show_file", "_key", "_audio", "_ps_out"]:
+             "open_settings", "window", "system_info", "power", "open_app", "close_app", "send_file", "show_file", "_key", "_audio", "_ps_out",
+             "fullscreen", "optiscaler"]:
     def stub(*a, _n=name, **k):
         calls.append((_n, a, k))
         return "shot.png" if _n == "screenshot" else ("50" if _n == "_audio" else (0, "x") if _n == "_ps_out" else _n)
@@ -41,6 +42,11 @@ CASES = [  # phrase, expected first call name, expected args/kwargs subset (or N
     ("отключи ночной свет", "night_light", (False,)),
     ("включи ночной свет", "night_light", (True,)),
     ("включи автоповорот экрана", "_key", None),
+    ("разверни на полный экран", "fullscreen", None),
+    ("разверни наполний экран", "fullscreen", None),  # as Whisper wrote it (dictate.log 2026-11-04)
+    ("сделай на весь экран", "fullscreen", None),
+    ("открой оптискейлер", "optiscaler", None),
+    ("меню оптискалера", "optiscaler", None),
     ("отправь скриншот экрана в телеграм", "screenshot", None),
     ("сделай скриншот", "screenshot", None),
     ("поставь таймер на двадцать пять минут", "timer", ("set", 1500)),

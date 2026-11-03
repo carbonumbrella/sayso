@@ -24,9 +24,13 @@ import openvino_genai as ov_genai
 import voice_settings  # follow_sec, warm_mic (written by the ClawVoice tray Settings window)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+import voice_settings as _vs  # stt_device / language from SaySo Settings (env vars still override)
 if sys.stdout is None:  # pythonw (autostart): no console, log to a file instead
     sys.stdout = sys.stderr = open(os.path.join(HERE, "dictate.log"), "w", encoding="utf-8", buffering=1)
-import voice_settings as _vs  # stt_device / language from SaySo Settings (env vars still override)
+    if _vs.get("dictation_log") is False:
+        # Settings "Журнал диктовки" off: no recognized text or events on disk (every print goes to stdout);
+        # errors and tracebacks (stderr) still land in the file
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
 
 
 def _pick_device():
@@ -157,7 +161,8 @@ def _prepare_npu():
     r = subprocess.run([sys.executable, "-c", code, model, _cache_dir(model), _npu_ready(key)],
                        creationflags=0x08000000 | 0x00004000, capture_output=True, text=True)  # no window, below normal
     if r.returncode or not os.path.exists(_npu_ready(key)):
-        print(f"NPU compile failed: {(r.stderr or r.stdout).strip()[-300:]}", flush=True)
+        # (an update kills it midway too: every process of the app folder is ended; the next start tries again)
+        print(f"NPU compile failed (exit {r.returncode}): {(r.stderr or r.stdout).strip()[-300:] or 'no output'}", flush=True)
         write_state()
         return
     try:

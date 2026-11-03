@@ -20,13 +20,14 @@
       <!-- tabs: the Claw screen at 175% has little height, so one page at a time -->
       <Border Style="{StaticResource SegBox}" Margin="0,12,0,4">
         <UniformGrid x:Name="TabsGrid" Rows="1">
-          <RadioButton x:Name="TabMain" Content="Основное" GroupName="tab" Style="{StaticResource Seg}" IsChecked="True"/>
-          <RadioButton x:Name="TabVoice" Content="Голос" GroupName="tab" Style="{StaticResource Seg}"/>
-          <RadioButton x:Name="TabModel" Content="Модель" GroupName="tab" Style="{StaticResource Seg}"/>
-          <RadioButton x:Name="TabTg" Content="Телеграм" GroupName="tab" Style="{StaticResource Seg}"/>
-          <RadioButton x:Name="TabCmd" Content="Команды" GroupName="tab" Style="{StaticResource Seg}"/>
-          <RadioButton x:Name="TabPlug" Content="Плагины" GroupName="tab" Style="{StaticResource Seg}"/>
-          <RadioButton x:Name="TabSys" Content="Система" GroupName="tab" Style="{StaticResource Seg}"/>
+          <RadioButton x:Name="TabMain" Content="Основное" GroupName="tab" Style="{StaticResource Seg}" Padding="2,0" IsChecked="True"/>
+          <RadioButton x:Name="TabSys" Content="Распознавание" GroupName="tab" Style="{StaticResource Seg}" Padding="2,0"/>
+          <RadioButton x:Name="TabVoice" Content="Голос" GroupName="tab" Style="{StaticResource Seg}" Padding="2,0"/>
+          <RadioButton x:Name="TabModel" Content="Помощник" GroupName="tab" Style="{StaticResource Seg}" Padding="2,0"/>
+          <RadioButton x:Name="TabTg" Content="Телеграм" GroupName="tab" Style="{StaticResource Seg}" Padding="2,0"/>
+          <RadioButton x:Name="TabCmd" Content="Команды" GroupName="tab" Style="{StaticResource Seg}" Padding="2,0"/>
+          <RadioButton x:Name="TabPlug" Content="Плагины" GroupName="tab" Style="{StaticResource Seg}" Padding="2,0"/>
+          <RadioButton x:Name="TabMore" Content="Ещё" GroupName="tab" Style="{StaticResource Seg}" Padding="2,0"/>
         </UniformGrid>
       </Border>
 
@@ -50,9 +51,9 @@
             <TextBlock x:Name="AssistantOnNote" Visibility="Collapsed" FontSize="12" TextWrapping="Wrap" Margin="4,12,0,0"
                        Foreground="{DynamicResource Sub}">
               <Run Text="Помощник включён. Для свободного разговора можно подключить языковую модель на "/><Hyperlink x:Name="ToModelLink"
-                Foreground="{DynamicResource Accent}"><Run Text="вкладке «Модель»"/></Hyperlink><Run Text="."/>
+                Foreground="{DynamicResource Accent}"><Run Text="вкладке «Помощник»"/></Hyperlink><Run Text="."/>
             </TextBlock>
-            <TextBlock Text="ПОМОЩНИК" Style="{StaticResource Label}"/>
+            <TextBlock Text="ВКЛЮЧЕНИЕ" Style="{StaticResource Label}"/>
             <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
               <StackPanel>
                 <Grid Margin="0,8">
@@ -81,7 +82,7 @@
                   <StackPanel Margin="0,0,56,0">
                     <StackPanel Orientation="Horizontal">
                       <TextBlock x:Name="GemmaTitle" Text="Модель загружена" FontWeight="SemiBold"/>
-                      <local:HelpTip Text="Локальная Gemma 3 4B отвечает на свободные вопросы и разбирает необычные команды. Включена: около 3.8 ГБ оперативной памяти, NPU занят только во время ответа. Выключена: память свободна, простые команды и поиск в интернете работают без неё. Вариант модели выбирается на вкладке «Модель»."/>
+                      <local:HelpTip Text="Локальная Gemma 3 4B отвечает на свободные вопросы и разбирает необычные команды. Включена: около 3.8 ГБ оперативной памяти, NPU занят только во время ответа. Выключена: память свободна, простые команды и поиск в интернете работают без неё. Вариант модели выбирается на вкладке «Помощник»."/>
                     </StackPanel>
                     <TextBlock x:Name="GemmaSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -112,6 +113,17 @@
                     <TextBlock Text="Писк при нажатии кнопки и в конце записи" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
                   <CheckBox x:Name="BeepSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+                <Border Height="1" Background="{DynamicResource Border}"/>
+                <Grid Margin="0,8">
+                  <StackPanel Margin="0,0,56,0">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="Журнал диктовки" FontWeight="SemiBold"/>
+                      <local:HelpTip Text="Файл dictate.log в папке программы: что распознано, какие команды выполнены, ошибки. Он помогает понять, почему что-то не сработало, и перезаписывается при каждом запуске диктовки. Выключи, если не хочешь, чтобы надиктованный текст оставался на диске: тогда в файл попадают только ошибки. Применяется после перезапуска диктовки, это делается само."/>
+                    </StackPanel>
+                    <TextBlock Text="Распознанный текст и события в dictate.log" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <CheckBox x:Name="LogSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                 </Grid>
                 <Border Height="1" Background="{DynamicResource Border}"/>
                 <Grid Margin="0,8">
@@ -259,6 +271,21 @@
               </UniformGrid>
             </Border>
             <TextBlock x:Name="ProvHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+            <TextBlock Text="ИНТЕРНЕТ" Style="{StaticResource Label}"/>
+            <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
+              <Grid Margin="0,8">
+                <StackPanel Margin="0,0,56,0">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Полностью офлайн" FontWeight="SemiBold"/>
+                    <local:HelpTip Text="Помощник ничего не отправляет в сеть: нет погоды, поиска, Википедии, облачной модели и модели на своём сервере (варианты «Облако» и «Свой сервер» становятся серыми, сохранённый выбор вернётся, когда офлайн выключишь). Распознавание речи всегда работает на этом ПК, с этим переключателем и без него."/>
+                  </StackPanel>
+                  <TextBlock Text="Без погоды, поиска, Википедии, облака и своего сервера. Диктовка и команды работают" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="OfflineSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
+          </StackPanel>
+          <StackPanel Grid.Column="2">
             <StackPanel x:Name="NpuFields" Visibility="Collapsed">
               <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
                 <TextBlock Text="ГДЕ ЗАПУСКАТЬ GEMMA" Style="{StaticResource Label}" Margin="0"/>
@@ -298,28 +325,6 @@
               <Button x:Name="ModelTestBtn" Grid.Column="2" Content="Проверить" Style="{StaticResource Flat}"/>
             </Grid>
             <TextBlock x:Name="ModelStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
-          </StackPanel>
-          <StackPanel Grid.Column="2">
-            <TextBlock Text="ИНТЕРНЕТ" Style="{StaticResource Label}"/>
-            <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
-              <Grid Margin="0,8">
-                <StackPanel Margin="0,0,56,0">
-                  <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Полностью офлайн" FontWeight="SemiBold"/>
-                    <local:HelpTip Text="Помощник ничего не отправляет в сеть: нет погоды, поиска, Википедии и облачной модели. Распознавание речи всегда работает на этом ПК, с этим переключателем и без него."/>
-                  </StackPanel>
-                  <TextBlock Text="Без погоды, поиска, Википедии и облачной модели. Диктовка и команды работают" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
-                </StackPanel>
-                <CheckBox x:Name="OfflineSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-              </Grid>
-            </Border>
-            <TextBlock Text="ГОРОД ДЛЯ ПОГОДЫ" Style="{StaticResource Label}" ToolTip="Для ответов о погоде. Хранится только на этом ПК, можно сказать и голосом: «мой город Москва»"/>
-            <Grid>
-              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-              <TextBox x:Name="CityBox" Style="{StaticResource Field}"/>
-              <Button x:Name="CityBtn" Grid.Column="2" Content="Сохранить" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>
-            </Grid>
-            <TextBlock x:Name="CityNow" Foreground="{DynamicResource Sub}" FontSize="12" Margin="4,6,0,0" TextWrapping="Wrap"/>
           </StackPanel>
         </Grid>
 
@@ -383,7 +388,12 @@
             <TextBlock Text="ДЕЙСТВИЕ" Style="{StaticResource Label}"/>
             <ComboBox x:Name="CmdDo" Style="{StaticResource Combo}"/>
             <TextBlock x:Name="CmdArgLabel" Text="ПАРАМЕТР" Style="{StaticResource Label}"/>
-            <TextBox x:Name="CmdArg" Style="{StaticResource Field}"/>
+            <Grid>
+              <TextBox x:Name="CmdArg" Style="{StaticResource Field}"/>
+              <!-- placeholder while the field is empty (set per action in code) -->
+              <TextBlock x:Name="CmdArgHint" IsHitTestVisible="False" Margin="14,0,0,0" VerticalAlignment="Center"
+                         Foreground="{DynamicResource Sub}" Visibility="Collapsed"/>
+            </Grid>
             <TextBlock Text="ОТВЕТ ПОМОЩНИКА (НЕОБЯЗАТЕЛЬНО)" Style="{StaticResource Label}"/>
             <TextBox x:Name="CmdReply" Style="{StaticResource Field}"/>
             <Grid Margin="0,12,0,0">
@@ -443,16 +453,24 @@
               </UniformGrid>
             </Border>
             <TextBlock x:Name="HwText" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0" Text="Определяю железо…"/>
+            <TextBlock x:Name="SysStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+          </StackPanel>
+          <StackPanel Grid.Column="2">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="СКАЧАННЫЕ МОДЕЛИ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Необязательные модели можно скачать и удалить, чтобы освободить диск. Ту модель, что сейчас распознаёт речь, удалить нельзя: сначала выбери другую выше. Точная модель для NPU при первом запуске готовится около 6 минут, всё это время работает быстрая. Gemma скачивается на вкладке «Модель», нужен токен Hugging Face."/>
+              <local:HelpTip Text="Необязательные модели можно скачать и удалить, чтобы освободить диск. Ту модель, что сейчас распознаёт речь, удалить нельзя: сначала выбери другую выше. Точная модель для NPU при первом запуске готовится около 6 минут, всё это время работает быстрая. Gemma скачивается на вкладке «Помощник», нужен токен Hugging Face."/>
             </StackPanel>
             <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
               <StackPanel x:Name="ModelRows"/>
             </Border>
             <TextBlock x:Name="ModelsStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
           </StackPanel>
-          <StackPanel Grid.Column="2">
+        </Grid>
+
+        <!-- ================= more: program folders, data, about ================= -->
+        <Grid x:Name="PageMore" Visibility="Collapsed">
+          <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ПАПКИ С ПРОГРАММАМИ" Style="{StaticResource Label}" Margin="0"/>
               <local:HelpTip Text="Команды «открой …» и «закрой …» знают программы из меню «Пуск». Если программы или игры лежат просто в папке (портативные, игры вне Steam, папка с ярлыками), добавь эту папку здесь. Помощник найдёт в ней ярлыки и программы на два уровня вглубь: папка с одной программой называется по имени папки («Игры\Hades\Hades.exe» откроется по слову «Hades»). Установщики, удаление, отчёты об ошибках пропускаются. Список обновляется сразу и каждые 10 минут, или по команде «обнови список приложений». Нагрузка: короткий просмотр папки, без фоновой работы."/>
@@ -462,6 +480,15 @@
             </Border>
             <Button x:Name="AddAppFolderBtn" Content="Добавить папку" Style="{StaticResource Flat}" Margin="0,8,0,0"/>
             <TextBlock x:Name="AppFoldersStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+            <TextBlock Text="ГОРОД ДЛЯ ПОГОДЫ" Style="{StaticResource Label}" ToolTip="Для ответов о погоде. Хранится только на этом ПК, можно сказать и голосом: «мой город Москва»"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <TextBox x:Name="CityBox" Style="{StaticResource Field}"/>
+              <Button x:Name="CityBtn" Grid.Column="2" Content="Сохранить" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>
+            </Grid>
+            <TextBlock x:Name="CityNow" Foreground="{DynamicResource Sub}" FontSize="12" Margin="4,6,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+          <StackPanel Grid.Column="2">
             <TextBlock Text="ДАННЫЕ" Style="{StaticResource Label}" ToolTip="Экспорт сохраняет настройки, имя, команды и плагины в zip на рабочий стол, без токенов и ключей"/>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
@@ -470,11 +497,26 @@
             </Grid>
             <Button x:Name="DiagBtn" Content="Собрать отчёт для диагностики" Style="{StaticResource Flat}" Margin="0,8,0,0"
                     ToolTip="Журналы, настройки и сведения о железе в zip на рабочий стол, без токенов и ключей"/>
-            <TextBlock x:Name="SysStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
-            <TextBlock Text="ОБНОВЛЕНИЯ" Style="{StaticResource Label}"/>
-            <TextBlock x:Name="VersionText" FontWeight="SemiBold"/>
-            <Button x:Name="UpdateBtn" Content="Проверить обновления" Style="{StaticResource Flat}" Margin="0,10,0,0"/>
+            <TextBlock x:Name="MoreStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="О ПРОГРАММЕ" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="«Проверить обновления» смотрит последний выпуск SaySo на GitHub. Если он новее, кнопка «Скачать» откроет страницу выпуска: скачай установщик и запусти поверх, настройки и модели сохранятся. Сам SaySo ничего не скачивает и не обновляет без тебя."/>
+            </StackPanel>
+            <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,10">
+              <StackPanel>
+                <TextBlock x:Name="VersionText" FontWeight="SemiBold"/>
+                <TextBlock Text="Голосовой помощник и диктовка для Windows. Открытый код, лицензия MIT." Foreground="{DynamicResource Sub}"
+                           FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
+              </StackPanel>
+            </Border>
+            <Button x:Name="UpdateBtn" Content="Проверить обновления" Style="{StaticResource Flat}" Margin="0,8,0,0"/>
+            <Button x:Name="UpdateGetBtn" Content="Скачать новую версию" Style="{StaticResource Flat}" Margin="0,8,0,0"
+                    Background="{DynamicResource Accent}" Foreground="White" Visibility="Collapsed"/>
             <TextBlock x:Name="UpdateStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+            <UniformGrid Rows="1" Margin="0,8,-8,0">
+              <Button x:Name="RepoBtn" Content="Страница на GitHub" Style="{StaticResource Flat}" Margin="0,0,8,0"/>
+              <Button x:Name="GuideBtn" Content="Инструкция" Style="{StaticResource Flat}" Margin="0,0,8,0"/>
+            </UniformGrid>
           </StackPanel>
         </Grid>
       </Grid>

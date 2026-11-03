@@ -94,7 +94,7 @@ def remove(key):
         if not d:
             return {"ok": True}
         if voice_settings.get("llm").get("provider") == "npu":
-            raise RuntimeError("Gemma выбрана на вкладке «Модель»: сначала выбери там другой вариант")
+            raise RuntimeError("Gemma выбрана на вкладке «Помощник»: сначала выбери там другой вариант")
         shutil.rmtree(d)
         return {"ok": True}
     if key not in voice_settings.WHISPER:
@@ -283,7 +283,7 @@ def main(argv):
             res = {}
             for folder in voice_settings.get("app_folders") or []:
                 names = [n for n, _ in g.folder_apps_in(folder)]
-                res[folder] = {"count": len(names), "names": names[:6], "exists": os.path.isdir(folder)}
+                res[folder] = {"count": len(names), "names": names, "exists": os.path.isdir(folder)}
             return out(res)
         if cmd == "prepare":
             return out(prepare())

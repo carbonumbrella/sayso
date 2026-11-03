@@ -153,8 +153,8 @@ namespace ClawVoice
                     void Note(string code) => note.Text = code == "cloud"
                         ? "Бесплатный ключ Gemini: нажми «Получить ключ», войди в Google-аккаунт, нажми «Create API key» и вставь ключ сюда."
                         : code == "npu" ? (gemma ? "Gemma уже скачана и будет работать на этом компьютере, без интернета."
-                                                 : "Gemma скачивается потом в настройках, вкладка «Модель». Нужен бесплатный аккаунт Hugging Face.")
-                        : "Модель можно подключить позже на вкладке «Модель».";
+                                                 : "Gemma скачивается потом в настройках, вкладка «Помощник». Нужен бесплатный аккаунт Hugging Face.")
+                        : "Модель можно подключить позже на вкладке «Помощник».";
                     var options = new List<(string, string)> { ("Без модели", "none"), ("Gemini, бесплатно", "cloud") };
                     options.Add(("Локально", "npu"));
                     foreach (var (title, code) in options)

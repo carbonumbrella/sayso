@@ -279,7 +279,8 @@ namespace ClawVoice
             m.Items.Add("Настройки…", null, (_, _) => ShowSettings());
             if (AmbilightInstalled) m.Items.Add("Подсветка…", null, (_, _) => OpenAmbilight());
             m.Items.Add("Список команд", null, (_, _) => ShowCommands());
-            m.Items.Add("Журнал диктовки", null, (_, _) => Stack.Open(Stack.DictateLog));
+            var log = new Forms.ToolStripMenuItem("Журнал диктовки", null, (_, _) => Stack.Open(Stack.DictateLog));
+            m.Items.Add(log);
             m.Items.Add(restart);
             m.Items.Add(new Forms.ToolStripSeparator());
             m.Items.Add("Выход (остановить помощника)", null, (_, _) => Exit(stopStack: true));
@@ -289,6 +290,7 @@ namespace ClawVoice
                 dictation.Checked = _dictationWanted;
                 listen.Checked = Stack.Listening;
                 gemma.Checked = Stack.GemmaWanted;
+                log.Enabled = SettingsWindow.DictationLogOn;  // Settings -> Основное -> "Журнал диктовки" off: nothing to open
             };
             return m;
         }

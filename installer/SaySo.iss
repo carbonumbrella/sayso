@@ -8,7 +8,7 @@
 #define AppName "SaySo"
 #define RuntimeUrl "https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe"
 #ifndef AppVersion
-  #define AppVersion "0.3.13"
+  #define AppVersion "0.3.14"
 #endif
 #ifndef Stage
   #define Stage "..\publish\stage"
@@ -143,7 +143,7 @@ begin
   SetupPage.Values[Ord(Prev = 'minimal')] := True;
   ModelPage := CreateInputOptionPage(SetupPage.ID, 'Модель распознавания', 'Какую модель Whisper скачать?',
     'Обе модели работают на NPU, видеокарте и процессоре, SaySo сам выберет, где запускать: сначала NPU, ' +
-    'потом видеокарта, потом процессор. Модель меняется и докачивается потом в настройках, вкладка «Система».', True, False);
+    'потом видеокарта, потом процессор. Модель меняется и докачивается потом в настройках, вкладка «Распознавание».', True, False);
   ModelPage.Add('Авто: точная, если есть видеокарта без NPU; иначе быстрая');
   ModelPage.Add('Быстрая (Whisper small, 244 МБ, ~0.8 ГБ памяти): быстро везде, когда играет музыка, ошибается чаще');
   ModelPage.Add('Точная (Whisper turbo, 0.8 ГБ, для NPU своя сборка 1.6 ГБ; 1.3-2 ГБ памяти): почти без ошибок в тишине и точнее, когда играет негромкая музыка; при громкой ошибаются обе. ' +

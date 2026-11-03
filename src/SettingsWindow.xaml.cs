@@ -37,6 +37,12 @@ namespace ClawVoice
             ListenSwitch.Click += (_, _) => Stack.Listening = ListenSwitch.IsChecked == true;
             WarmSwitch.Click += (_, _) => Set("warm_mic", WarmSwitch.IsChecked == true);
             BeepSwitch.Click += (_, _) => Set("beeps", BeepSwitch.IsChecked == true);
+            LogSwitch.Click += (_, _) =>
+            {
+                Set("dictation_log", LogSwitch.IsChecked == true);
+                LogBtn.IsEnabled = LogSwitch.IsChecked == true;
+                AppRef.RestartDictationSoon();  // dictate.py opens its log at start
+            };
             AutostartSwitch.Click += (_, _) => Autostart.Apply(AutostartSwitch.IsChecked == true);
             // turns the assistant on right here (commands without a model work); the model stays optional, one click away
             EnableAssistantBtn.Click += (_, _) =>
@@ -93,10 +99,10 @@ namespace ClawVoice
             ModelSaveBtn.Click += (_, _) => SaveModel();
             ModelTestBtn.Click += async (_, _) => await TestModel();
             GeminiKeyBtn.Click += (_, _) => Stack.Open("https://aistudio.google.com/apikey");
-            GemmaHowBtn.Click += (_, _) => Stack.Open(GuideUrl + "#gemma-на-npu");
+            GemmaHowBtn.Click += (_, _) => Stack.Open(GuideUrl + "#gemma-на-этом-компьютере");
             GemmaGetBtn.Click += async (_, _) => await GetGemma();
             _ = DetectNpu();
-            OfflineSwitch.Click += (_, _) => Set("offline", OfflineSwitch.IsChecked == true);
+            OfflineSwitch.Click += (_, _) => { Set("offline", OfflineSwitch.IsChecked == true); OfflineGate(); ShowModelNow(); };
             CityBtn.Click += async (_, _) => await SetCity();
             CityBox.KeyDown += async (_, e) => { if (e.Key == Key.Return) await SetCity(); };
 
@@ -113,7 +119,9 @@ namespace ClawVoice
 
             // commands
             CmdDo.ItemsSource = Actions.Select(a => a.Title).ToList();
-            CmdDo.SelectionChanged += (_, _) => CmdArgLabel.Text = CmdDo.SelectedIndex >= 0 ? Actions[CmdDo.SelectedIndex].ArgTitle : "ПАРАМЕТР";
+            CmdDo.SelectionChanged += (_, _) => { CmdArgLabel.Text = CmdDo.SelectedIndex >= 0 ? Actions[CmdDo.SelectedIndex].ArgTitle : "ПАРАМЕТР"; CmdArgPlaceholder(); };
+            CmdArg.PreviewKeyDown += OnCmdArgKey;
+            CmdArg.TextChanged += (_, _) => CmdArgPlaceholder();
             CmdList.SelectionChanged += (_, _) => CmdShow();
             CmdNewBtn.Click += (_, _) =>
             {
@@ -141,12 +149,15 @@ namespace ClawVoice
             ImportBtn.Click += (_, _) => Import();
             DiagBtn.Click += async (_, _) => await Diagnostics();
             UpdateBtn.Click += async (_, _) => await CheckUpdate();
-            VersionText.Text = "SaySo " + (typeof(App).Assembly.GetName().Version?.ToString(3) ?? "");
+            UpdateGetBtn.Click += (_, _) => { if (_updatePage.Length > 0) Stack.Open(_updatePage); };
+            RepoBtn.Click += (_, _) => Stack.Open(RepoUrl);
+            GuideBtn.Click += (_, _) => Stack.Open(GuideUrl);
+            VersionText.Text = "SaySo " + (typeof(App).Assembly.GetName().Version?.ToString(3) ?? "") + " (бета)";
         }
 
         IEnumerable<(RadioButton, FrameworkElement)> Tabs() => new (RadioButton, FrameworkElement)[]
             { (TabMain, PageMain), (TabVoice, PageVoice), (TabModel, PageModel), (TabTg, PageTg), (TabCmd, PageCmd),
-              (TabPlug, PagePlug), (TabSys, PageSys) };
+              (TabPlug, PagePlug), (TabSys, PageSys), (TabMore, PageMore) };
 
         void ShowPage(FrameworkElement page)
         {
@@ -154,7 +165,8 @@ namespace ClawVoice
             if (page == PageVoice) LoadVoicePage();
             if (page == PageCmd) CmdFill();
             if (page == PagePlug) PlugFill();
-            if (page == PageSys) { LoadSysPage(); _ = FillModels(); _ = FillAppFolders(); }
+            if (page == PageSys) { LoadSysPage(); _ = FillModels(); }
+            if (page == PageMore) _ = FillAppFolders();
             if (page == PageTg)
             {
                 var id = Read()["telegram_chat_id"];
@@ -166,7 +178,7 @@ namespace ClawVoice
         public void ShowTab(string name)
         {
             var tab = name switch { "voice" => TabVoice, "model" => TabModel, "telegram" => TabTg, "commands" => TabCmd,
-                                    "plugins" => TabPlug, "system" => TabSys, _ => TabMain };
+                                    "plugins" => TabPlug, "system" => TabSys, "more" => TabMore, _ => TabMain };
             tab.IsChecked = true;
         }
 
@@ -204,7 +216,9 @@ namespace ClawVoice
             VolumeSlider.Value = (double?)s["tts_volume"] ?? 100;
             WarmSwitch.IsChecked = (bool?)s["warm_mic"] ?? true;
             BeepSwitch.IsChecked = (bool?)s["beeps"] ?? true;
+            LogSwitch.IsChecked = LogBtn.IsEnabled = DictationLogOn;
             OfflineSwitch.IsChecked = (bool?)s["offline"] ?? false;
+            OfflineGate();
             AutostartSwitch.IsChecked = Autostart.IsSet();
             NameBox.Text = AssistantName();
             string lang = (string?)s["language"] ?? "ru";
@@ -257,7 +271,7 @@ namespace ClawVoice
             GemmaTitle.Text = npu ? "Gemma загружена" : "Языковая модель";
             bool gemma = Stack.GemmaWanted;
             GemmaSwitch.IsChecked = npu && gemma;
-            GemmaSub.Text = !npu ? (prov == "none" ? "Без модели: команды и ответы из интернета" : "Внешняя модель, настраивается на вкладке «Модель»")
+            GemmaSub.Text = !npu ? (prov == "none" ? "Без модели: команды и ответы из интернета" : "Внешняя модель, настраивается на вкладке «Помощник»")
                 : App.GemmaLoaded ? "В памяти, около 3.8 ГБ. Выключи, чтобы освободить" : gemma ? "Загружается…" : "Выгружена: простые команды работают, разговор нет";
             StatusText.Text = "";
         }
@@ -318,6 +332,37 @@ namespace ClawVoice
             if (_capturing == null) return;
             _capturing = null;
             ShowHotkeys();
+        }
+
+        /// <summary>The pressed combination as "Win+Ctrl+Alt+Shift+Key", or null while only modifiers are down.</summary>
+        string? PressedCombo(KeyEventArgs e)
+        {
+            Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift
+                or Key.LWin or Key.RWin) return null;
+            var mods = Keyboard.Modifiers;
+            bool win = Keyboard.IsKeyDown(Key.LWin) || Keyboard.IsKeyDown(Key.RWin);
+            return (win ? "Win+" : "") + (mods.HasFlag(ModifierKeys.Control) ? "Ctrl+" : "") +
+                   (mods.HasFlag(ModifierKeys.Alt) ? "Alt+" : "") + (mods.HasFlag(ModifierKeys.Shift) ? "Shift+" : "") + KeyName(key);
+        }
+
+        /// <summary>Commands tab, action "Нажать сочетание клавиш": the field records the pressed keys (typing
+        /// "Ctrl+Shift+M" by hand still works). A plain key without a modifier is typed as text; Backspace clears.</summary>
+        void CmdArgPlaceholder()
+        {
+            bool keys = CmdDo.SelectedIndex >= 0 && Actions[CmdDo.SelectedIndex].Arg == "keys";
+            CmdArgHint.Text = "Введи сочетание клавиш";
+            CmdArgHint.Visibility = keys && CmdArg.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        void OnCmdArgKey(object sender, KeyEventArgs e)
+        {
+            if (CmdDo.SelectedIndex < 0 || Actions[CmdDo.SelectedIndex].Arg != "keys") return;
+            Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+            bool win = Keyboard.IsKeyDown(Key.LWin) || Keyboard.IsKeyDown(Key.RWin);
+            if (Keyboard.Modifiers == ModifierKeys.None && !win && key is not (>= Key.F1 and <= Key.F24)) return;
+            e.Handled = true;  // also keeps Alt from opening a menu and Ctrl+A from selecting
+            if (PressedCombo(e) is { } combo) CmdArg.Text = combo;
         }
 
         void OnCaptureKey(object sender, KeyEventArgs e)
@@ -502,9 +547,11 @@ namespace ClawVoice
             var s = Read();
             var llm = s["llm"] as JsonObject ?? new JsonObject();
             string prov = (string?)llm["provider"] ?? "none", model = (string?)llm["model"] ?? "";
-            bool on = prov != "none" && AssistantOn;
+            bool blocked = (bool?)s["offline"] == true && prov is "cloud" or "server";  // offline mode turns them off
+            bool on = prov != "none" && AssistantOn && !blocked;
             string dev = ((string?)s["llm_device"] ?? "auto") switch { "NPU" => "NPU", "GPU" => "видеокарта", "CPU" => "процессор", _ => "авто" };
             ModelNow.Text = !AssistantOn ? "Помощник выключен: установлена только диктовка"
+                : blocked ? (prov == "cloud" ? "Облако выключено" : "Свой сервер выключен") + " режимом «Полностью офлайн»: команды работают без модели"
                 : prov == "cloud" ? $"✓  Подключено: облако, {(model.Length > 0 ? model : "модель не указана")}"
                 : prov == "server" ? $"✓  Подключено: свой сервер, {(model.Length > 0 ? model : (string?)llm["url"] ?? "")}"
                 : prov == "npu" ? $"✓  Подключено: Gemma на этом компьютере ({dev}), {(App.GemmaLoaded ? "загружена" : Stack.GemmaWanted ? "загружается" : "выгружена")}"
@@ -514,6 +561,23 @@ namespace ClawVoice
             ModelNowBox.BorderBrush = on ? new System.Windows.Media.SolidColorBrush(green) : (System.Windows.Media.Brush)FindResource("Border");
             ModelNowBox.Background = on ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0x3F, 0xB9, 0x6E))
                                         : (System.Windows.Media.Brush)FindResource("Card");
+        }
+
+        /// <summary>"Полностью офлайн": the network variants (cloud, own server) are greyed and cannot be picked; a draft
+        /// on one of them moves to "Без модели". The saved choice is kept and works again when offline is off.</summary>
+        void OfflineGate()
+        {
+            bool off = OfflineSwitch.IsChecked == true;
+            foreach (var rb in new[] { ProvServer, ProvCloud })
+            {
+                rb.IsEnabled = !off;
+                rb.ToolTip = off ? "Выключено: включён режим «Полностью офлайн»" : null;
+            }
+            if (off && (ProvServer.IsChecked == true || ProvCloud.IsChecked == true))
+            {
+                ProvNone.IsChecked = true;
+                ModelFields();
+            }
         }
 
         async Task TestModel()
@@ -602,7 +666,7 @@ namespace ClawVoice
             new("open_app", "Открыть программу", "app", "ПРОГРАММА (НАЗВАНИЕ ИЛИ ПУТЬ)"),
             new("open_url", "Открыть сайт", "url", "АДРЕС ({*} = ХВОСТ ФРАЗЫ)"),
             new("open_folder", "Открыть папку", "path", "ПАПКА"),
-            new("hotkey", "Нажать сочетание клавиш", "keys", "СОЧЕТАНИЕ, НАПРИМЕР Ctrl+Shift+M"),
+            new("hotkey", "Нажать сочетание клавиш", "keys", "СОЧЕТАНИЕ КЛАВИШ"),
             new("type_text", "Напечатать текст", "text", "ТЕКСТ ({*} = ХВОСТ ФРАЗЫ)"),
             new("webhook", "Вызвать webhook", "url", "АДРЕС WEBHOOK"),
             new("script", "Команда PowerShell (с подтверждением)", "command", "КОМАНДА POWERSHELL"),
@@ -747,6 +811,9 @@ namespace ClawVoice
 
         static bool AssistantOn => (bool?)Read()["assistant"] != false;
 
+        /// <summary>Settings "dictation_log" (default on): dictate.log keeps the recognized text and events.</summary>
+        public static bool DictationLogOn => (bool?)Read()["dictation_log"] != false;
+
         /// <summary>Dictation only: everything that needs the assistant is greyed, the banner on "Основное" says how to
         /// turn it on. The "Модель" tab stays open: choosing a variant there turns the assistant on.</summary>
         void Gate()
@@ -778,10 +845,10 @@ namespace ClawVoice
 
         static readonly (string Key, string Title, string Note)[] ModelCatalog =
         {
-            ("small", "Распознавание: быстрая (Whisper small)", "для NPU, видеокарты и процессора, ~0.8 ГБ памяти"),
-            ("turbo", "Распознавание: точная (Whisper turbo) для видеокарты и процессора", "сжатая сборка, на NPU не запускается, ~1.3-2 ГБ памяти"),
-            ("turbo-npu", "Распознавание: точная (Whisper turbo) для NPU", "своя сборка для NPU, первый запуск готовится ~6 мин, ~2 ГБ памяти"),
-            ("gemma", "Языковая модель Gemma 3 4B", "помощник на этом ПК, ~4 ГБ памяти, скачивается с токеном"),
+            ("small", "Быстрая (Whisper small)", "~0.8 ГБ памяти"),
+            ("turbo", "Точная (Whisper turbo) для видеокарты и процессора", "~1.3-2 ГБ памяти"),
+            ("turbo-npu", "Точная (Whisper turbo) для NPU", "первый запуск ~6 мин, ~2 ГБ памяти"),
+            ("gemma", "Gemma 3 4B, языковая модель", "~4 ГБ памяти, нужен токен"),
         };
 
         async Task FillModels()
@@ -936,7 +1003,7 @@ namespace ClawVoice
                 int n = (int?)info?["count"] ?? 0;
                 var names = (info?["names"] as JsonArray)?.Select(x => (string)x!).ToList() ?? new List<string>();
                 string sub = info == null ? "не удалось прочитать" : (bool?)info["exists"] == false ? "папка не найдена"
-                    : n == 0 ? "программ не нашлось" : $"{n} {Plural(n)}: {string.Join(", ", names)}{(n > names.Count ? "…" : "")}";
+                    : n == 0 ? "программ не нашлось" : $"{n} {Plural(n)}: {string.Join(", ", names.Take(6))}{(n > 6 ? "…" : "")}\nНажми, чтобы увидеть все";
                 var row = new Grid { Margin = new Thickness(0, 8, 0, 8) };
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -955,8 +1022,35 @@ namespace ClawVoice
                 };
                 Grid.SetColumn(remove, 1);
                 row.Children.Add(texts); row.Children.Add(remove);
+                if (names.Count > 0)  // a tap on the folder: every name "открой …" knows from it
+                {
+                    texts.Background = System.Windows.Media.Brushes.Transparent;  // the whole text area takes the tap
+                    texts.Cursor = Cursors.Hand;
+                    texts.MouseLeftButtonUp += (_, _) => ShowFolderApps(texts, f, names);
+                }
                 AppFolderRows.Children.Add(row);
             }
+        }
+
+        /// <summary>All program names found in a folder, in a card under the row, scrolled when long.</summary>
+        void ShowFolderApps(FrameworkElement anchor, string folder, List<string> names)
+        {
+            var list = new StackPanel();
+            var head = new TextBlock { Text = $"«Открой …» знает из этой папки: {names.Count}", FontWeight = FontWeights.SemiBold,
+                                       Margin = new Thickness(0, 0, 0, 6), TextWrapping = TextWrapping.Wrap };
+            list.Children.Add(head);
+            foreach (var n in names.Distinct().OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase))
+                list.Children.Add(new TextBlock { Text = "•  " + n, Margin = new Thickness(0, 2, 0, 2), TextWrapping = TextWrapping.Wrap });
+            var scroll = new ScrollViewer { Content = list, MaxHeight = 360, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                                            PanningMode = PanningMode.VerticalOnly };
+            var card = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(14, 10, 8, 12), BorderThickness = new Thickness(1),
+                Width = Math.Max(280, anchor.ActualWidth), Child = scroll,
+                Background = (System.Windows.Media.Brush)FindResource("Card"), BorderBrush = (System.Windows.Media.Brush)FindResource("Border"),
+                Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 16, ShadowDepth = 3, Opacity = 0.35 } };
+            // the popup is its own tree: brushes are copied, not referenced
+            foreach (TextBlock t in list.Children) t.Foreground = (System.Windows.Media.Brush)FindResource("Fg");
+            new System.Windows.Controls.Primitives.Popup { Child = card, PlacementTarget = anchor, AllowsTransparency = true, StaysOpen = false,
+                Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, IsOpen = true };
         }
 
         static string Plural(int n) => n % 10 == 1 && n % 100 != 11 ? "программа"
@@ -1011,9 +1105,9 @@ namespace ClawVoice
                     if (f.EndsWith("secrets.bin") || f.EndsWith(".tmp")) continue;  // secrets are bound to this PC
                     zip.CreateEntryFromFile(f, Path.GetRelativePath(Stack.UserDir, f));
                 }
-                SysStatus.Text = "Сохранено на рабочий стол: " + Path.GetFileName(dest) + ". Токены и ключи не входят, их вводят заново.";
+                MoreStatus.Text = "Сохранено на рабочий стол: " + Path.GetFileName(dest) + ". Токены и ключи не входят, их вводят заново.";
             }
-            catch (Exception e) { SysStatus.Text = "Не получилось: " + e.Message; }
+            catch (Exception e) { MoreStatus.Text = "Не получилось: " + e.Message; }
         }
 
         void Import()
@@ -1033,14 +1127,14 @@ namespace ClawVoice
                 _voiceLoaded = false;
                 Reload();
                 AppRef.RestartDictationSoon();
-                SysStatus.Text = "Настройки загружены";
+                MoreStatus.Text = "Настройки загружены";
             }
-            catch (Exception e) { SysStatus.Text = "Не получилось: " + e.Message; }
+            catch (Exception e) { MoreStatus.Text = "Не получилось: " + e.Message; }
         }
 
         async Task Diagnostics()
         {
-            SysStatus.Text = "Собираю…";
+            MoreStatus.Text = "Собираю…";
             string dest = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), $"SaySo-report-{DateTime.Now:yyyy-MM-dd-HHmm}.zip");
             var hw = await Task.Run(() => Stack.Cli("hw"));
             try
@@ -1059,27 +1153,44 @@ namespace ClawVoice
                 using (var w = new StreamWriter(zip.CreateEntry("system.txt").Open()))
                     w.Write($"SaySo {typeof(App).Assembly.GetName().Version}\nWindows {Environment.OSVersion}\n" +
                             $"App {Stack.Dir}\nUser data {Stack.UserDir}\n");
-                SysStatus.Text = "Отчёт на рабочем столе: " + Path.GetFileName(dest) + ". Токенов и ключей в нём нет.";
+                MoreStatus.Text = "Отчёт на рабочем столе: " + Path.GetFileName(dest) + ". Токенов и ключей в нём нет.";
             }
-            catch (Exception e) { SysStatus.Text = "Не получилось: " + e.Message; }
+            catch (Exception e) { MoreStatus.Text = "Не получилось: " + e.Message; }
         }
 
         /// <summary>Update check against a small JSON {"version": "x.y.z", "url": "..."} (settings "update_url").
         /// Empty until SaySo is published.</summary>
+        const string RepoUrl = "https://github.com/carbonumbrella/sayso";
+        string _updatePage = "";
+
+        /// <summary>The newest release on GitHub (pre-releases count: every SaySo release is a beta) against this build.
+        /// Nothing is downloaded here: a newer one shows a button that opens its page.</summary>
         async Task CheckUpdate()
         {
-            string url = (string?)Read()["update_url"] ?? "";
-            if (url.Length == 0) { UpdateStatus.Text = "Адрес обновлений появится после публикации SaySo"; return; }
+            UpdateBtn.IsEnabled = false;
+            UpdateStatus.Text = "Проверяю…";
             try
             {
                 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                var j = JsonNode.Parse(await http.GetStringAsync(url))!;
-                var latest = Version.Parse((string)j["version"]!);
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("SaySo-update-check");  // GitHub's API refuses requests without one
+                var all = JsonNode.Parse(await http.GetStringAsync("https://api.github.com/repos/carbonumbrella/sayso/releases?per_page=10"))!.AsArray();
                 var mine = typeof(App).Assembly.GetName().Version!;
-                if (latest > mine) { UpdateStatus.Text = $"Есть версия {latest}. Открываю страницу загрузки"; Stack.Open((string)j["url"]!); }
-                else UpdateStatus.Text = "Установлена последняя версия";
+                Version best = new(0, 0); string page = "";
+                foreach (var r in all)
+                {
+                    if ((bool?)r?["draft"] == true) continue;
+                    if (Version.TryParse(((string?)r?["tag_name"] ?? "").TrimStart('v'), out var v) && v > best) { best = v; page = (string?)r?["html_url"] ?? ""; }
+                }
+                bool newer = best > new Version(mine.Major, mine.Minor, mine.Build);
+                _updatePage = newer ? page : "";
+                UpdateGetBtn.Visibility = newer ? Visibility.Visible : Visibility.Collapsed;
+                UpdateGetBtn.Content = $"Скачать SaySo {best}";
+                UpdateStatus.Text = newer ? $"Есть новая версия {best}. Скачай установщик и запусти поверх: настройки и модели сохранятся."
+                    : best.Major + best.Minor + best.Build == 0 ? "Выпусков на GitHub не нашлось" : $"Установлена последняя версия ({mine.ToString(3)})";
+                Toast(UpdateStatus.Text.Split('.')[0], true);
             }
-            catch (Exception e) { UpdateStatus.Text = "Не удалось проверить: " + e.Message; }
+            catch (Exception e) { UpdateStatus.Text = "Не удалось проверить: " + e.Message + ". Возможно, нет интернета."; }
+            finally { UpdateBtn.IsEnabled = true; }
         }
     }
 }

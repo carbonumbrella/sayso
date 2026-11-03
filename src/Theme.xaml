@@ -136,11 +136,12 @@
     <Setter Property="Padding" Value="2"/>
   </Style>
   <Style x:Key="Seg" TargetType="RadioButton">
+    <Setter Property="Padding" Value="10,0"/>
     <Setter Property="Cursor" Value="Hand"/><Setter Property="Foreground" Value="{DynamicResource Fg}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="RadioButton">
-          <Border x:Name="B" CornerRadius="8" Background="Transparent" Padding="10,0" Height="30" Margin="2">
+          <Border x:Name="B" CornerRadius="8" Background="Transparent" Padding="{TemplateBinding Padding}" Height="30" Margin="2">
             <TextBlock Text="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center"
                        FontWeight="SemiBold" Foreground="{TemplateBinding Foreground}"/>
           </Border>

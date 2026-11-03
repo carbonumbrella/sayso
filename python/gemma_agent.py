@@ -559,6 +559,27 @@ def _key(*vks):
         user32.keybd_event(vk, 0, 2, 0)
 
 
+BROWSERS = ("chrome", "msedge", "firefox", "opera", "brave", "yandex", "vivaldi", "explorer")
+
+
+def fullscreen():
+    """'полный экран' (the ClawTweaks widget's Fullscreen card does the same): F11 in browsers and Explorer,
+    Alt+Enter in games and players."""
+    pid = ctypes.c_ulong()
+    user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(pid))
+    if _proc_name(pid.value) in BROWSERS:
+        _key(0x7A)  # F11
+        return "Полный экран: F11"
+    _key(0x12, 0x0D)  # Alt+Enter
+    return "Полный экран: Alt+Enter"
+
+
+def optiscaler():
+    """'меню оптискейлера': Insert, OptiScaler's default menu key (the ClawTweaks widget's OptiScaler card)."""
+    _key(0x2D)
+    return "Меню OptiScaler: Insert"
+
+
 def media(action):
     vk = {"play_pause": 0xB3, "next": 0xB0, "prev": 0xB1, "stop": 0xB2}.get(action, 0xB3)
     _key(vk)
@@ -1528,6 +1549,11 @@ def fast_route(p):
             return "Скриншот в буфере", False
         screenshot(win_only)
         return f"Скриншот {'окна ' if win_only else ''}сохранён{clip}", False
+    # Whisper: "наполний экран", "Оптискалер", "Оптискейлер"
+    if re.search(r"опти ?ск[еаэ]й?л|optiscal", p):
+        return optiscaler(), False
+    if re.search(r"(?:полн\w*|наполн\w*|весь|full) ?(?:экран|screen)|полноэкран|fullscreen", p):
+        return fullscreen(), False
     if re.search(r"ночн\w* (свет|режим)|night ?light", p):
         on = None if re.search(r"переключ", p) else not re.search(r"\b(вы|от)ключ|убер|без ", p)
         return night_light(on), False
@@ -1647,8 +1673,8 @@ GEMMA_STATE = os.path.join(HERE, "gemma_state.txt")  # "off": unloaded on purpos
 def provider():
     cfg = voice_settings.get("llm") or {}
     prov = cfg.get("provider", "npu")
-    if voice_settings.get("offline") and prov == "cloud":
-        return "none"  # offline mode: nothing leaves the PC
+    if voice_settings.get("offline") and prov in ("cloud", "server"):
+        return "none"  # offline mode: nothing leaves the PC (an own server counts as network too; Settings greys both)
     return prov if prov in ("none", "npu", "server", "cloud") else "npu"
 
 
@@ -1737,7 +1763,7 @@ def llm_voice():
 def gemma_load(on):
     """'загрузи / выгрузи Гемму': the state file is the switch, ensure_server() never starts Gemma while off."""
     if on and not voice_settings.gemma_dir():
-        return "Gemma не скачана. Её можно скачать в настройках, вкладка «Модель», вариант «Локально»"
+        return "Gemma не скачана. Её можно скачать в настройках, вкладка «Помощник», вариант «Локально»"
     with open(GEMMA_STATE, "w") as f:
         f.write("on" if on else "off")
     if on:
@@ -2322,8 +2348,8 @@ HELP_FILE = os.path.join(HERE, "commands.txt")  # shown by the SaySo tray menu (
 HELP_FULL = """🎙 SaySo: голосовой помощник
 🎙 Как позвать: держи кнопку диктовки и говори: текст напечатается, где курсор · нажми кнопку команды и скажи команду · или скажи «{name}, …» (от сети, когда включено слушание) · после ответа я ещё слушаю несколько секунд · «стоп» перебивает ответ
 🔊 Звук и экран: громкость 40 · громче, тише · выключи / включи звук · яркость 70 · ночной свет вкл/выкл · микрофон вкл/выкл · пауза, следующий трек
-🖥 Окна и система: сверни окна · заблокируй · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox · выключи, перезагрузи, усыпи (с подтверждением)
-📂 Программы и файлы: открой / закрой любую программу или игру · открой ютуб · настройки блютуз · настройки SaySo / подсветки / kbdhaptic · обнови список приложений · свои папки с программами и играми: настройки → «Система» · найди файл … (по всему диску) · открой найденный файл · скопируй найденный файл
+🖥 Окна и система: сверни окна · полный экран (F11 в браузере, Alt+Enter в игре) · меню OptiScaler · заблокируй · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox · выключи, перезагрузи, усыпи (с подтверждением)
+📂 Программы и файлы: открой / закрой любую программу или игру · открой ютуб · настройки блютуз · настройки SaySo / подсветки / kbdhaptic · обнови список приложений · свои папки с программами и играми: настройки → «Ещё» · найди файл … (по всему диску) · открой найденный файл · скопируй найденный файл
 ⌨️ Печать командой: напиши … · допиши … · с новой строки … · отправь (нажмёт Enter)
 ✏️ Правка голосом (кнопкой диктовки, фраза целиком): удали · удали слово / три слова · удали предложение · удали всё · замени … на … · новая строка · новый абзац · точка, запятая, вопрос · с большой / маленькой буквы · отмени, верни обратно · выдели / скопируй / вырежи всё · скопируй, вставь · в начало, в конец · отправить · «напиши удали» печатает само слово
 📸 Скриншоты (в «Изображения → Снимки экрана» и в буфер): скриншот · скриншот окна · скриншот области · открой папку скриншотов
@@ -2607,7 +2633,7 @@ def handle(text, dry=False):
                 PENDING["load"] = time.time() + 20
                 report("Без Gemma это не умею. Загрузить её?", vocal=True)
             else:
-                report("Это я умею только с языковой моделью. Её можно подключить в настройках, вкладка «Модель»",
+                report("Это я умею только с языковой моделью. Её можно подключить в настройках, вкладка «Помощник»",
                        vocal=True)
             _finish(text, None)
             return
