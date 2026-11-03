@@ -164,31 +164,22 @@ def _dir_bytes(d):
 PROGRESS_FILE = os.path.join(HERE, "download_progress.json")  # read by the installer and Settings while a model downloads
 
 
-MIRROR = "https://hf-mirror.com"  # public Hugging Face mirror: used only when huggingface.co itself crawls
-SLOW = ("модель качается слишком медленно: huggingface.co и его зеркало почти не отдают файлы. Возможно, для "
-        "скачивания потребуется VPN. Запусти загрузку ещё раз, скачанное сохранится")
+SLOW = ("модель качается слишком медленно: huggingface.co почти не отдаёт файлы. Возможно, для скачивания "
+        "потребуется VPN. Запусти загрузку ещё раз, скачанное сохранится")
 
 
 def snapshot_watched(repo, dest, key="", total_mb=0, token=None, window=90, min_rate=30_000):
-    """snapshot_download (it resumes: files already there are kept) that does not hang. Without a VPN the Hugging Face
-    CDN can be throttled to ~1 KB/s (Russia, 2026-11): the download then moves to hf-mirror.com (5.5 MB/s there) and
-    every file it brought is checked against the hashes huggingface.co publishes. A token (gated Gemma) never goes to
-    the mirror. Each try runs in its own process so a crawling one can be killed. Progress: download_progress.json."""
-    sources = ["https://huggingface.co"] + ([] if token else [MIRROR])
+    """snapshot_download (it resumes: files already there are kept) that does not hang. Without a VPN (Russia, 2026-11)
+    only the hf_xet transfer crawls at ~1 KB/s; plain HTTP from huggingface.co ran at full speed there (244 MB in 36 s),
+    so the child process downloads with xet off. A crawl still ends the try instead of hanging the installer.
+    (hf-mirror.com was tried: huggingface_hub fails on it, its API redirects back to huggingface.co.)
+    Progress: download_progress.json."""
     try:
-        for i, endpoint in enumerate(sources):
-            res = _fetch_watched(repo, dest, endpoint, token, key, total_mb, window, min_rate)
-            if res is None:
-                if endpoint != sources[0]:
-                    _verify(repo, dest)
-                return
-            if res != "slow":
-                if endpoint == MIRROR:  # the mirror answers only some regions (it redirects others back to huggingface.co)
-                    raise RuntimeError(SLOW)
-                raise res
-            if i + 1 == len(sources):
-                raise RuntimeError(SLOW)
-            print(f"{endpoint} crawls, switching to {sources[i + 1]}", file=sys.stderr, flush=True)
+        res = _fetch_watched(repo, dest, "https://huggingface.co", token, key, total_mb, window, min_rate)
+        if res == "slow":
+            raise RuntimeError(SLOW)
+        if res is not None:
+            raise res
     finally:
         try:
             os.remove(PROGRESS_FILE)
@@ -240,30 +231,6 @@ def _fetch_child(repo, dest, endpoint):
     except Exception as e:
         out({"error": str(e), "kind": type(e).__name__,
              "status": getattr(getattr(e, "response", None), "status_code", 0) or 0})
-
-
-def _verify(repo, dest):
-    """Files from the mirror against huggingface.co's own hashes (sha256 for large files, the git blob id for small
-    ones). A file that differs is deleted and the download fails: the mirror is not trusted with the content."""
-    import hashlib
-    from huggingface_hub import HfApi
-    info = HfApi(endpoint="https://huggingface.co").model_info(repo, files_metadata=True)
-    for f in info.siblings:
-        path = os.path.join(dest, f.rfilename)
-        if not os.path.isfile(path):
-            continue
-        if f.lfs:
-            h, want = hashlib.sha256(), f.lfs.sha256
-        else:
-            h, want = hashlib.sha1(), f.blob_id
-            h.update(f"blob {os.path.getsize(path)}\0".encode())
-        with open(path, "rb") as fh:
-            for chunk in iter(lambda: fh.read(1 << 20), b""):
-                h.update(chunk)
-        if want and h.hexdigest() != want:
-            os.remove(path)
-            raise RuntimeError(f"файл {f.rfilename} с зеркала не совпал с оригиналом и удалён. Возможно, для "
-                               "скачивания потребуется VPN")
 
 
 def _progress(key, mb, total_mb):

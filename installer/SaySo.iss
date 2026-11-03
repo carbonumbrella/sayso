@@ -8,7 +8,7 @@
 #define AppName "SaySo"
 #define RuntimeUrl "https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe"
 #ifndef AppVersion
-  #define AppVersion "0.3.10"
+  #define AppVersion "0.3.11"
 #endif
 #ifndef Stage
   #define Stage "..\publish\stage"
@@ -142,8 +142,8 @@ begin
     'Обе модели работают на NPU, видеокарте и процессоре, SaySo сам выберет, где запускать: сначала NPU, ' +
     'потом видеокарта, потом процессор. Модель меняется и докачивается потом в настройках, вкладка «Система».', True, False);
   ModelPage.Add('Авто: точная, если есть видеокарта без NPU; иначе быстрая');
-  ModelPage.Add('Быстрая (Whisper small, 244 МБ, ~0.8 ГБ памяти): быстро везде, под музыкой ошибается чаще');
-  ModelPage.Add('Точная (Whisper turbo, 0.8 ГБ, для NPU своя сборка 1.6 ГБ; 1.3-2 ГБ памяти): почти без ошибок даже под музыкой. ' +
+  ModelPage.Add('Быстрая (Whisper small, 244 МБ, ~0.8 ГБ памяти): быстро везде, когда играет музыка, ошибается чаще');
+  ModelPage.Add('Точная (Whisper turbo, 0.8 ГБ, для NPU своя сборка 1.6 ГБ; 1.3-2 ГБ памяти): почти без ошибок в тишине и точнее, когда играет негромкая музыка; при громкой ошибаются обе. ' +
     'На NPU в первый раз готовится около 6 минут, пока работает быстрая; на процессоре в 4 раза медленнее быстрой');
   Prev := ExpandConstant('{param:MODEL|}');
   if Prev = '' then Prev := GetPreviousData('SttModel', 'auto');
