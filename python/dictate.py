@@ -445,7 +445,9 @@ def is_silence_or_noise(text, audio=None, wake_gate=False):
     t = text.strip().lower()
     if not t:
         return True
-    letters = re.sub(r'[\W\d_]+', '', t)
+    # digits count as content: counting aloud comes back as "1, 2, 3, 4, 5." and was dropped as noise
+    # (the wizard's mic test "heard nothing", dictated numbers vanished)
+    letters = re.sub(r'[\W_]+', '', t)
     if len(letters) <= 1:
         return True
     hallucinations = [
@@ -650,6 +652,9 @@ def run_trainer_port():
         data, addr = s.recvfrom(1024)
         try:
             req = json.loads(data)
+            if req.get("cmd") == "ping":  # the wizard asks first, so it says "Говори" only when this is ready
+                s.sendto(b'{"ok": true}', addr)
+                continue
             sec = max(1.0, min(8.0, float(req.get("sec", 3))))
             with lock:
                 if stream is None or not stream.active:
@@ -659,7 +664,12 @@ def run_trainer_port():
             time.sleep(sec)
             audio = np.concatenate(TRAIN["buf"]) if TRAIN["buf"] else np.zeros(0, np.float32)
             TRAIN["buf"] = None
-            text = speech_to_text(audio, quiet=True, wake_gate=False) if len(audio) else ""
+            rms = float(np.sqrt(np.mean(audio ** 2))) if len(audio) else 0.0
+            print(f"[mic test] {len(audio) / RATE:.1f} s, rms {rms:.4f}, peak {float(np.abs(audio).max()) if len(audio) else 0:.3f},"
+                  f" {MIC_MODE} mode", flush=True)
+            # logged like dictation (the user speaks on purpose here): the next line shows what Whisper returned
+            # and whether the noise filter dropped it
+            text = speech_to_text(audio, wake_gate=False) if len(audio) else ""
             s.sendto(json.dumps({"text": text}, ensure_ascii=False).encode("utf-8"), addr)
         except Exception as e:
             TRAIN["buf"] = None

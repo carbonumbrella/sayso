@@ -136,6 +136,7 @@ namespace ClawVoice
                 rb.Click += (_, _) => ChooseLlmDevice(dev);
             foreach (var (rb, size) in new[] { (SttAuto, "auto"), (SttSmall, "small"), (SttTurbo, "turbo") })
                 rb.Click += async (_, _) => await ChooseStt(size);
+            AddAppFolderBtn.Click += async (_, _) => await AddAppFolder();
             ExportBtn.Click += (_, _) => Export();
             ImportBtn.Click += (_, _) => Import();
             DiagBtn.Click += async (_, _) => await Diagnostics();
@@ -153,7 +154,7 @@ namespace ClawVoice
             if (page == PageVoice) LoadVoicePage();
             if (page == PageCmd) CmdFill();
             if (page == PagePlug) PlugFill();
-            if (page == PageSys) { LoadSysPage(); _ = FillModels(); }
+            if (page == PageSys) { LoadSysPage(); _ = FillModels(); _ = FillAppFolders(); }
             if (page == PageTg)
             {
                 var id = Read()["telegram_chat_id"];
@@ -778,8 +779,8 @@ namespace ClawVoice
         static readonly (string Key, string Title, string Note)[] ModelCatalog =
         {
             ("small", "Распознавание: быстрая (Whisper small)", "для NPU, видеокарты и процессора, ~0.8 ГБ памяти"),
-            ("turbo", "Распознавание: точная (Whisper turbo)", "для видеокарты и процессора, ~1.3-2 ГБ памяти"),
-            ("turbo-npu", "Распознавание: точная для NPU", "первый запуск готовится ~6 мин, ~2 ГБ памяти"),
+            ("turbo", "Распознавание: точная (Whisper turbo) для видеокарты и процессора", "сжатая сборка, на NPU не запускается, ~1.3-2 ГБ памяти"),
+            ("turbo-npu", "Распознавание: точная (Whisper turbo) для NPU", "своя сборка для NPU, первый запуск готовится ~6 мин, ~2 ГБ памяти"),
             ("gemma", "Языковая модель Gemma 3 4B", "помощник на этом ПК, ~4 ГБ памяти, скачивается с токеном"),
         };
 
@@ -910,6 +911,71 @@ namespace ClawVoice
             _restarting = false;
             status.Text = state is null ? "Распознавание долго не запускается. Подробности в dictate.log в папке программы."
                 : $"Готово: {state["model"]} на {state["device"]}.{extra}";
+        }
+
+        // ---------------- program folders (system page): settings "app_folders", searched by "открой …"
+
+        static List<string> AppFolders() => (Read()["app_folders"] as JsonArray)?.Select(x => (string)x!).ToList() ?? new List<string>();
+
+        async Task FillAppFolders()
+        {
+            var folders = AppFolders();
+            AppFolderRows.Children.Clear();
+            if (folders.Count == 0)
+            {
+                var none = new TextBlock { Text = "Пока нет: «открой …» знает программы из меню «Пуск».", FontSize = 12, Margin = new Thickness(0, 8, 0, 8), TextWrapping = TextWrapping.Wrap };
+                none.SetResourceReference(TextBlock.ForegroundProperty, "Sub");
+                AppFolderRows.Children.Add(none);
+                return;
+            }
+            var r = await Task.Run(() => Stack.Cli("folder-apps"));
+            foreach (string folder in folders)
+            {
+                if (AppFolderRows.Children.Count > 0) AppFolderRows.Children.Add(new Border { Height = 1, Background = (System.Windows.Media.Brush)FindResource("Border") });
+                var info = r[folder] as JsonObject;
+                int n = (int?)info?["count"] ?? 0;
+                var names = (info?["names"] as JsonArray)?.Select(x => (string)x!).ToList() ?? new List<string>();
+                string sub = info == null ? "не удалось прочитать" : (bool?)info["exists"] == false ? "папка не найдена"
+                    : n == 0 ? "программ не нашлось" : $"{n} {Plural(n)}: {string.Join(", ", names)}{(n > names.Count ? "…" : "")}";
+                var row = new Grid { Margin = new Thickness(0, 8, 0, 8) };
+                row.ColumnDefinitions.Add(new ColumnDefinition());
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var texts = new StackPanel { Margin = new Thickness(0, 0, 10, 0) };
+                texts.Children.Add(new TextBlock { Text = folder, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                var s = new TextBlock { Text = sub, FontSize = 12, TextWrapping = TextWrapping.Wrap };
+                s.SetResourceReference(TextBlock.ForegroundProperty, "Sub");
+                texts.Children.Add(s);
+                var remove = new Button { Content = "Убрать", Style = (Style)FindResource("Flat"), Height = 30, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+                string f = folder;
+                remove.Click += async (_, _) =>
+                {
+                    Set("app_folders", new JsonArray(AppFolders().Where(x => x != f).Select(x => (JsonNode)x!).ToArray()));
+                    AppFoldersStatus.Text = $"Убрано: {f}";
+                    await FillAppFolders();
+                };
+                Grid.SetColumn(remove, 1);
+                row.Children.Add(texts); row.Children.Add(remove);
+                AppFolderRows.Children.Add(row);
+            }
+        }
+
+        static string Plural(int n) => n % 10 == 1 && n % 100 != 11 ? "программа"
+            : n % 10 is >= 2 and <= 4 && (n % 100 < 12 || n % 100 > 14) ? "программы" : "программ";
+
+        async Task AddAppFolder()
+        {
+            var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Папка с программами или играми" };
+            if (dlg.ShowDialog(this) != true) return;
+            var list = AppFolders();
+            if (list.Any(x => string.Equals(x, dlg.FolderName, StringComparison.OrdinalIgnoreCase)))
+            {
+                AppFoldersStatus.Text = "Эта папка уже в списке";
+                return;
+            }
+            list.Add(dlg.FolderName);
+            Set("app_folders", new JsonArray(list.Select(x => (JsonNode)x!).ToArray()));
+            AppFoldersStatus.Text = "Добавлено. Скажи «открой …» и название программы.";
+            await FillAppFolders();
         }
 
         readonly Dictionary<string, Button> _modelBtn = new();

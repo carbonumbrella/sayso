@@ -70,6 +70,7 @@ DEFAULTS = {
     # Whisper spellings heard over music on the Claw (е/э/ё are equal in wake.py)
     "wake_names": ["сэйсо", "сэйс", "сэйса", "сэйзо", "сэй со", "сэйсуа", "ces"],
     "llm": {"provider": "none", "url": "http://127.0.0.1:8081", "model": ""},  # none | npu (= local) | server | cloud
+    "app_folders": [],                       # extra folders searched for programs and games ("открой …")
     "llm_device": "auto",                    # the local Gemma: auto (NPU > Intel GPU > CPU) | NPU | GPU | CPU
     "offline": False,                        # no web search, weather, Wikipedia, cloud model
     "mic_device": "",                        # input device name ("" = system default)

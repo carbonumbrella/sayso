@@ -150,6 +150,29 @@ def download(key="auto"):
     return {"model": dest, "key": key}
 
 
+def prepare():
+    """Installer step after the download: compile the model dictation starts with for the NPU now (~80 s the first
+    time on the Claw), so the first start and the wizard's mic test do not wait for it. Same device rule and cache
+    folders as dictate.py; turbo for the NPU starts on small (compiled in the background later), so small is it."""
+    dev = (voice_settings.get("stt_device") or "auto").upper()
+    if dev == "AUTO":
+        dev = hw()["recommend"]
+    if dev != "NPU":
+        return {"skipped": dev}
+    key = voice_settings.whisper_key(voice_settings.get("stt_model"), "NPU")
+    if key == "turbo-npu":
+        key = "small"
+    if not voice_settings.whisper_complete(key):
+        return {"skipped": key}
+    model = voice_settings.whisper_dir(key)
+    cache = os.path.join(HERE, "npu_cache") if "small" in os.path.basename(model) else \
+        os.path.join(HERE, "npu_cache", os.path.basename(model))
+    import openvino_genai as og
+    t = time.time()
+    og.WhisperPipeline(model, "NPU", CACHE_DIR=cache)
+    return {"prepared": key, "seconds": round(time.time() - t, 1)}
+
+
 def _dir_bytes(d):
     total = 0
     for root, _, files in os.walk(d):
@@ -255,6 +278,15 @@ def main(argv):
             return out(gemma_download(sys.stdin.read().strip()))
         if cmd == "_fetch":  # internal: one download try, see snapshot_watched
             return _fetch_child(*args[:3])
+        if cmd == "folder-apps":  # Settings "Папки с программами": what each folder gives "открой …"
+            import gemma_agent as g
+            res = {}
+            for folder in voice_settings.get("app_folders") or []:
+                names = [n for n, _ in g.folder_apps_in(folder)]
+                res[folder] = {"count": len(names), "names": names[:6], "exists": os.path.isdir(folder)}
+            return out(res)
+        if cmd == "prepare":
+            return out(prepare())
         if cmd == "download":
             return out(download(args[0] if args else "auto"))
         if cmd == "setup":  # setup <full|minimal> <auto|small|turbo>: the installer's choices

@@ -20,7 +20,7 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=SaySo
 DefaultDirName={localappdata}\Programs\SaySo
-DisableDirPage=yes
+DisableDirPage=auto
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\publish\installer
@@ -127,6 +127,9 @@ procedure InitializeWizard;
 var
   Prev: String;
 begin
+  WizardForm.SelectDirBrowseLabel.Caption := 'Сюда же установщик скачает Python и модель распознавания: от 1.5 до 3 ГБ, ' +
+    'с языковой моделью Gemma ещё 3.3 ГБ. Папка должна быть доступна без прав администратора: Program Files не подойдёт. ' +
+    'Настройки хранятся отдельно, в %APPDATA%\SaySo. Нажми «Далее», чтобы продолжить, или «Обзор», чтобы выбрать другую папку.';
   DownloadPage := CreateDownloadPage('Загрузка .NET 10', 'Для работы нужна среда .NET 10 Desktop Runtime от Microsoft.', nil);
   SetupPage := CreateInputOptionPage(wpSelectTasks, 'Тип установки', 'Что установить?',
     'Распознавание речи работает на этом компьютере в обоих вариантах. Помощника можно включить и позже, в настройках. ' +
@@ -155,8 +158,23 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   Code: Integer;
+  Dir: String;
 begin
   Result := True;
+  if CurPageID = wpSelectDir then
+  begin
+    // per-user install (no admin): a protected folder fails later, when Python is being written
+    Dir := Lowercase(AddBackslash(WizardDirValue));
+    if (Pos(Lowercase(AddBackslash(ExpandConstant('{commonpf64}'))), Dir) = 1) or
+       (Pos(Lowercase(AddBackslash(ExpandConstant('{commonpf32}'))), Dir) = 1) or
+       (Pos(Lowercase(AddBackslash(ExpandConstant('{win}'))), Dir) = 1) then
+    begin
+      MsgBox('В эту папку нельзя установить без прав администратора. Выбери папку в своём профиле или на другом диске, ' +
+             'например D:\SaySo.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+  end;
   if (CurPageID = wpReady) and not RuntimeInstalled then
   begin
     DownloadPage.Clear;

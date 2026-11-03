@@ -872,7 +872,7 @@ def activate(hwnd):
         user32.SwitchToThisWindow(hwnd, True)
 
 
-_start_apps, _start_apps_t = None, 0
+_start_apps, _start_apps_t, _start_apps_folders = None, 0, ()
 TRANSLIT = dict(zip("абвгдеёзийклмнопрстуфхцыэ", "abvgdeeziiklmnoprstufhcye"))
 TRANSLIT.update({"ж": "zh", "ч": "ch", "ш": "sh", "щ": "sch", "ю": "yu", "я": "ya", "ь": "", "ъ": ""})
 
@@ -890,13 +890,52 @@ def _sound(s):
 def start_apps():
     """Start menu apps (incl. Store apps) + apps from plugins: [(name, AppID or path)].
     Rebuilt at startup and every 10 min, so newly installed apps and new game shortcuts are picked up."""
-    global _start_apps, _start_apps_t
-    if _start_apps is None or time.time() - _start_apps_t > 600:
+    global _start_apps, _start_apps_t, _start_apps_folders
+    folders = tuple(voice_settings.get("app_folders") or [])
+    if _start_apps is None or time.time() - _start_apps_t > 600 or folders != _start_apps_folders:
+        _start_apps_folders = folders  # a folder added in Settings is searched on the next command
         rc, out = _ps_out("Get-StartApps | ForEach-Object { $_.Name + [char]9 + $_.AppID }", timeout=30)
         apps = [tuple(l.split("\t", 1)) for l in out.splitlines() if "\t" in l]
-        apps[:0] = plugins.extra_apps()  # e.g. the Claw plugin's Desktop\games shortcuts
+        apps[:0] = plugins.extra_apps() + folder_apps()  # the Claw plugin's Desktop\games, Settings "Папки с программами"
         _start_apps, _start_apps_t = apps, time.time()
     return _start_apps
+
+
+FOLDER_SKIP = re.compile(r"(?i)unins|uninstall|setup|install|crash|update|redist|dxsetup|prereq|helper|report|"
+                         r"vcredist|dotnet|launcherpatch|cefprocess|webhelper")
+
+
+def folder_apps():
+    """Settings "app_folders" (portable programs, games outside the Start menu): shortcuts (.lnk, .url) in the folder
+    itself under their own names, and .exe files up to two levels down. A subfolder with one program is named after
+    the folder ("Games\\Hades\\Hades.exe" -> "Hades"), several programs keep their file names. Setup, uninstall,
+    crash reporters and the like are skipped."""
+    return [app for root in voice_settings.get("app_folders") or [] for app in folder_apps_in(root)]
+
+
+def folder_apps_in(root):
+    found = []
+    if not os.path.isdir(root):
+        return found
+    try:
+        for f in os.listdir(root):
+            if f.lower().endswith((".lnk", ".url")) and not FOLDER_SKIP.search(f):
+                found.append((os.path.splitext(f)[0], os.path.join(root, f)))
+    except OSError:
+        return found
+    base = os.path.normpath(root).count(os.sep)
+    for path, dirs, files in os.walk(root):
+        if os.path.normpath(path).count(os.sep) - base >= 2:
+            dirs[:] = []  # two levels are enough for a game folder; deeper are its own tools
+        exes = [f for f in files if f.lower().endswith(".exe") and not FOLDER_SKIP.search(f)]
+        if len(exes) == 1 and os.path.normpath(path) != os.path.normpath(root):
+            name = os.path.basename(path)
+            if re.fullmatch(r"(?i)bin(64|32)?|x64|x86|win(64|32)?|binaries|game|release", name):
+                name = os.path.basename(os.path.dirname(path))  # "Celeste\bin\Celeste.exe" -> "Celeste"
+            found.append((name, os.path.join(path, exes[0])))
+        else:
+            found += [(os.path.splitext(f)[0], os.path.join(path, f)) for f in exes]
+    return found
 
 
 def find_app(query):
@@ -1020,6 +1059,9 @@ def close_app(name):
         _, procs, classes, ru = APPS[key]
     else:
         procs, classes, ru = [re.sub(r"[^\w.-]", "", key).removesuffix(".exe")], [], name
+        hit = find_app(name)  # a program from "Папки с программами": its window belongs to that exe
+        if hit and hit[1].lower().endswith(".exe"):
+            procs.append(os.path.splitext(os.path.basename(hit[1]))[0].lower())
     if key == "explorer":  # only folder windows; never the shell process
         wins = top_windows((), ["CabinetWClass"])
         for h, _ in wins:
@@ -2077,7 +2119,7 @@ def edit_route(text, dictation=True):
         _erase(len(buf) - i, buf[:i])
         _paste_text(new + tail)
         return f"Заменила на «{new}»"
-    m = re.fullmatch(r"(?:удали|сотри|стереть|убери) (?:последн\w+ )?(\d+|\w+ )?слов\w*", p)
+    m = re.fullmatch(r"(?:удали|удалей|удалил\w?|удалить|удалите|удаляй|дили|дилли|сотри|стереть|убери) (?:последн\w+ )?(\d+|\w+ )?слов\w*", p)
     if m:
         if need():
             return need()
@@ -2091,7 +2133,7 @@ def edit_route(text, dictation=True):
                 _key(0x11, 0x08)
             TYPED["buf"] = ""
         return "Удалила слово" if n == 1 else f"Удалила слов: {n}"
-    if re.fullmatch(r"(?:удали|сотри|стереть|убери) (?:последн\w+ )?(?:предложени\w*|фраз\w*)", p):
+    if re.fullmatch(r"(?:удали|удалей|удалил\w?|удалить|удалите|удаляй|дили|дилли|сотри|стереть|убери) (?:последн\w+ )?(?:предложени\w*|фраз\w*)", p):
         if need():
             return need()
         if not buf.strip():
@@ -2103,7 +2145,8 @@ def edit_route(text, dictation=True):
             keep += " "
         _erase(len(buf) - len(keep), keep)
         return "Удалила предложение"
-    if re.fullmatch(r"(?:удали|сотри|стереть|смотри)(?: это| последнее| написанное| что написал\w*)?", p):  # Whisper: "Смотри"
+    # Whisper hears "удали" as "Удалей", "Удалил", "Дилли" and "сотри" as "Смотри" (dictate.log, 2026-11-04)
+    if re.fullmatch(r"(?:удали|удалей|удалил\w?|удалить|удалите|удаляй|дили|дилли|сотри|стереть|убери|смотри)(?: это| последнее| написанное| что написал\w*)?", p):
         if need():
             return need()
         if TYPED["last"] and buf.endswith(TYPED["last"]):
@@ -2280,7 +2323,7 @@ HELP_FULL = """🎙 SaySo: голосовой помощник
 🎙 Как позвать: держи кнопку диктовки и говори: текст напечатается, где курсор · нажми кнопку команды и скажи команду · или скажи «{name}, …» (от сети, когда включено слушание) · после ответа я ещё слушаю несколько секунд · «стоп» перебивает ответ
 🔊 Звук и экран: громкость 40 · громче, тише · выключи / включи звук · яркость 70 · ночной свет вкл/выкл · микрофон вкл/выкл · пауза, следующий трек
 🖥 Окна и система: сверни окна · заблокируй · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox · выключи, перезагрузи, усыпи (с подтверждением)
-📂 Программы и файлы: открой / закрой любую программу или игру · открой ютуб · настройки блютуз · настройки SaySo / подсветки / kbdhaptic · обнови список приложений · найди файл … (по всему диску) · открой найденный файл · скопируй найденный файл
+📂 Программы и файлы: открой / закрой любую программу или игру · открой ютуб · настройки блютуз · настройки SaySo / подсветки / kbdhaptic · обнови список приложений · свои папки с программами и играми: настройки → «Система» · найди файл … (по всему диску) · открой найденный файл · скопируй найденный файл
 ⌨️ Печать командой: напиши … · допиши … · с новой строки … · отправь (нажмёт Enter)
 ✏️ Правка голосом (кнопкой диктовки, фраза целиком): удали · удали слово / три слова · удали предложение · удали всё · замени … на … · новая строка · новый абзац · точка, запятая, вопрос · с большой / маленькой буквы · отмени, верни обратно · выдели / скопируй / вырежи всё · скопируй, вставь · в начало, в конец · отправить · «напиши удали» печатает само слово
 📸 Скриншоты (в «Изображения → Снимки экрана» и в буфер): скриншот · скриншот окна · скриншот области · открой папку скриншотов

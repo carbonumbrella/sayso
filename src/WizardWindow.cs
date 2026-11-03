@@ -14,8 +14,8 @@ using System.Windows.Media;
 
 namespace ClawVoice
 {
-    /// <summary>First start after installing (settings without "setup_done"): language, microphone with a test
-    /// recording, hotkeys, language model, then a first command to try. Everything can be changed later in Settings.</summary>
+    /// <summary>First start after installing (settings without "setup_done"): language, hotkeys, language model,
+    /// microphone with a test recording (last: the first start compiles Whisper meanwhile), then a first command to try. Everything can be changed later in Settings.</summary>
     public sealed class WizardWindow : Window
     {
         readonly TextBlock _title, _text;
@@ -70,7 +70,7 @@ namespace ClawVoice
         void Show(int page)
         {
             bool assistant = (bool?)SettingsWindow.Read()["assistant"] != false;
-            if (!assistant && page == 3) page = _page < 3 ? 4 : 2;  // dictation only: no model page
+            if (!assistant && page == 2) page = _page < 2 ? 3 : 1;  // dictation only: no model page
             _page = Math.Clamp(page, 0, 4);
             _body.Children.Clear();
             _back.Visibility = _page == 0 ? Visibility.Hidden : Visibility.Visible;
@@ -94,7 +94,7 @@ namespace ClawVoice
                     }
                     _body.Children.Add(new Border { Style = S("SegBox"), Child = seg });
                     break;
-                case 1:
+                case 3:
                     _title.Text = "Микрофон";
                     _text.Text = "Выбери микрофон и нажми «Проверить»: скажи любую фразу, и я покажу, что услышала.";
                     var box = new ComboBox { Style = S("Combo") };
@@ -128,17 +128,17 @@ namespace ClawVoice
                                    : $"Услышала: «{r}»";
                     };
                     break;
-                case 2:
+                case 1:
                     _title.Text = "Кнопки";
                     string dict = SettingsWindow.HotkeyText((string?)s["hotkey_dictation"] ?? SettingsWindow.DefaultDictation),
                            cmd = SettingsWindow.HotkeyText((string?)s["hotkey_gemma"] ?? SettingsWindow.DefaultGemma);
                     _text.Text = !assistant
-                        ? $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. Сочетание меняется в настройках."
-                        : $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. " +
+                        ? $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. Ошибся: так же скажи «удали», и последний кусок сотрётся. Сочетание меняется в настройках."
+                        : $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. Ошибся: так же скажи «удали». " +
                           $"Команда: нажми {cmd} и скажи, например, «громкость сорок». " +
                           $"А ещё можно позвать по имени: «{name}, сколько времени?». Сочетания меняются в настройках.";
                     break;
-                case 3:
+                case 2:
                     _title.Text = "Языковая модель (необязательно)";
                     _text.Text = "Без модели работают все команды, диктовка и ответы из интернета. Модель нужна для свободного разговора " +
                                  "и сложных просьб.";
@@ -221,13 +221,21 @@ namespace ClawVoice
         /// so keep asking for up to 40 s before calling it not running.</summary>
         static async Task<string> Record(int sec, Action<string> status)
         {
-            var until = DateTime.Now.AddSeconds(40);
+            // a first start loads (and on an NPU compiles) Whisper for up to a minute: wait for it quietly, and say
+            // "Говори" only once dictate.py answers, or the word flashed between the waits and the speech was lost
+            var until = DateTime.Now.AddSeconds(90);
             while (true)
             {
                 try
                 {
-                    status("Говори…");
                     using var udp = new UdpClient(0, AddressFamily.InterNetwork);
+                    var ep = new IPEndPoint(IPAddress.Loopback, 47323);
+                    byte[] ping = Encoding.UTF8.GetBytes("{\"cmd\":\"ping\"}");
+                    await udp.SendAsync(ping, ping.Length, ep);
+                    var pong = udp.ReceiveAsync();
+                    if (await Task.WhenAny(pong, Task.Delay(3000)) != pong) throw new SocketException((int)SocketError.ConnectionReset);
+                    _ = pong.Result;  // surfaces a "connection reset" (nobody listens yet) as the exception below
+                    status("Говори…");
                     byte[] req = Encoding.UTF8.GetBytes($"{{\"cmd\":\"record\",\"sec\":{sec}}}");
                     await udp.SendAsync(req, req.Length, new IPEndPoint(IPAddress.Loopback, 47323));
                     var recv = udp.ReceiveAsync();
@@ -240,7 +248,7 @@ namespace ClawVoice
                 {
                     if (DateTime.Now > until)
                         return "!распознавание речи не запустилось. Причина в журнале dictate.log в папке программы";
-                    status("Распознавание ещё запускается, подожди несколько секунд…");
+                    status($"Распознавание запускается, при первом запуске это до минуты… {(int)(DateTime.Now - until.AddSeconds(-90)).TotalSeconds} с");
                     await Task.Delay(2000);
                 }
                 catch (Exception e) { return "!" + e.Message; }
