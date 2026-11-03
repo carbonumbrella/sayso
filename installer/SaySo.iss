@@ -38,9 +38,9 @@ Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "autostart"; Description: "Запускать SaySo вместе с Windows"; Flags: checkedonce
-Name: "hotkeys"; Description: "Кнопки работают и поверх окон администратора (один запрос UAC)"; Flags: checkedonce
-Name: "desktopicon"; Description: "Ярлык на рабочем столе"; Flags: checkedonce
+Name: "autostart"; Description: "Запускать SaySo вместе с Windows"
+Name: "hotkeys"; Description: "Кнопки работают и поверх окон администратора (один запрос UAC)"
+Name: "desktopicon"; Description: "Ярлык на рабочем столе"
 
 [Files]
 Source: "{#Stage}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -297,7 +297,8 @@ begin
            ExpandConstant('{app}\bootstrap.log') + '. Модель скачивается с huggingface.co, возможно, для скачивания ' +
            'потребуется VPN. Потом запусти установку ещё раз, готовые шаги пропустятся.',
            mbError, MB_OK, IDOK);  // suppressible: a silent install (/SUPPRESSMSGBOXES) must not pop up a box
-  if WizardIsTaskSelected('hotkeys') then
+  // a silent update over a running SaySo keeps the elevated task from the first install: no UAC box each update
+  if WizardIsTaskSelected('hotkeys') and not (WizardSilent and WasRunning) then
   begin
     WizardForm.StatusLabel.Caption := 'Регистрирую кнопки…';
     ShellExec('runas', PS, '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\install_hotkey_task.ps1') +
