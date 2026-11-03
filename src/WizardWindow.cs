@@ -64,14 +64,19 @@ namespace ClawVoice
             return b;
         }
 
+        /// <summary>For SaySo.exe --render wizard0..4 (UX pictures without a window).</summary>
+        public void GoTo(int page) => Show(page);
+
         void Show(int page)
         {
+            bool assistant = (bool?)SettingsWindow.Read()["assistant"] != false;
+            if (!assistant && page == 3) page = _page < 3 ? 4 : 2;  // dictation only: no model page
             _page = Math.Clamp(page, 0, 4);
             _body.Children.Clear();
             _back.Visibility = _page == 0 ? Visibility.Hidden : Visibility.Visible;
             _next.Content = _page == 4 ? "Готово" : "Дальше";
             var s = SettingsWindow.Read();
-            string name = (string?)s["assistant_name"] ?? "Мурмур";
+            string name = (string?)s["assistant_name"] ?? "Сэйсо";
             switch (_page)
             {
                 case 0:
@@ -113,6 +118,11 @@ namespace ClawVoice
                     {
                         test.IsEnabled = false;
                         string r = await Record(4, s => heard.Text = s);
+                        if (r.StartsWith("!"))  // the first request can meet the mic still opening: one quiet retry
+                        {
+                            await Task.Delay(1500);
+                            r = await Record(4, s => heard.Text = s);
+                        }
                         test.IsEnabled = true;
                         heard.Text = r.StartsWith("!") ? "Не получилось: " + r[1..] : r.Length == 0 ? "Ничего не услышала. Проверь микрофон"
                                    : $"Услышала: «{r}»";
@@ -120,10 +130,13 @@ namespace ClawVoice
                     break;
                 case 2:
                     _title.Text = "Кнопки";
-                    string dict = (string?)s["hotkey_dictation"] ?? "Ctrl+Alt+Win+W", cmd = (string?)s["hotkey_gemma"] ?? "Ctrl+Win+Shift+G";
-                    _text.Text = $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. " +
-                                 $"Команда: нажми {cmd} и скажи, например, «громкость сорок». " +
-                                 $"А ещё можно позвать по имени: «{name}, сколько времени?». Сочетания меняются в настройках.";
+                    string dict = SettingsWindow.HotkeyText((string?)s["hotkey_dictation"] ?? SettingsWindow.DefaultDictation),
+                           cmd = SettingsWindow.HotkeyText((string?)s["hotkey_gemma"] ?? SettingsWindow.DefaultGemma);
+                    _text.Text = !assistant
+                        ? $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. Сочетание меняется в настройках."
+                        : $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. " +
+                          $"Команда: нажми {cmd} и скажи, например, «громкость сорок». " +
+                          $"А ещё можно позвать по имени: «{name}, сколько времени?». Сочетания меняются в настройках.";
                     break;
                 case 3:
                     _title.Text = "Языковая модель (необязательно)";
@@ -139,11 +152,11 @@ namespace ClawVoice
                     note.SetResourceReference(TextBlock.ForegroundProperty, "Sub");
                     void Note(string code) => note.Text = code == "cloud"
                         ? "Бесплатный ключ Gemini: нажми «Получить ключ», войди в Google-аккаунт, нажми «Create API key» и вставь ключ сюда."
-                        : code == "npu" ? (gemma ? "Gemma уже скачана и будет работать прямо на NPU, без интернета."
+                        : code == "npu" ? (gemma ? "Gemma уже скачана и будет работать на этом компьютере, без интернета."
                                                  : "Gemma скачивается потом в настройках, вкладка «Модель». Нужен бесплатный аккаунт Hugging Face.")
                         : "Модель можно подключить позже на вкладке «Модель».";
                     var options = new List<(string, string)> { ("Без модели", "none"), ("Gemini, бесплатно", "cloud") };
-                    if (npu) options.Add(("На NPU", "npu"));
+                    options.Add(("Локально", "npu"));
                     foreach (var (title, code) in options)
                     {
                         var rb = new RadioButton { Content = title, GroupName = "wprov", Style = S("Seg"), IsChecked = prov == code };
@@ -187,9 +200,14 @@ namespace ClawVoice
                     Note(prov);
                     _body.Children.Add(note);
                     break;
+                case 4 when !assistant:
+                    _title.Text = "Готово";
+                    _text.Text = $"Открой любое поле ввода, держи {SettingsWindow.HotkeyText((string?)s["hotkey_dictation"] ?? SettingsWindow.DefaultDictation)} и говори. " +
+                                 "Голосовые команды и помощника можно включить потом в настройках.";
+                    break;
                 case 4:
                     _title.Text = "Готово";
-                    _text.Text = $"Попробуй: «{name}, сколько времени?» или нажми {(string?)s["hotkey_gemma"] ?? "Ctrl+Win+Shift+G"} и скажи " +
+                    _text.Text = $"Попробуй: «{name}, сколько времени?» или нажми {SettingsWindow.HotkeyText((string?)s["hotkey_gemma"] ?? SettingsWindow.DefaultGemma)} и скажи " +
                                  "«что ты умеешь». Чтобы я лучше узнавала имя по твоему голосу, пройди короткую тренировку.";
                     var train = new Button { Content = "Тренировать имя", Style = S("Flat") };
                     train.Click += (_, _) => ((App)Application.Current).ShowTrainer();

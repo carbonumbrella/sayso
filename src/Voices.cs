@@ -6,22 +6,25 @@ using System.Threading.Tasks;
 
 namespace ClawVoice
 {
-    /// <summary>Windows voices (the same System.Speech the Python side speaks with through ps_host.ps1).</summary>
+    /// <summary>The assistant's voices: the Windows voices (the same System.Speech the Python side speaks with through
+    /// ps_host.ps1).</summary>
     public static class Voices
     {
         public static List<string> Installed()
         {
+            var list = new List<string>();
             try
             {
                 using var s = new SpeechSynthesizer();
-                return s.GetInstalledVoices().Where(v => v.Enabled)
-                        .Select(v => v.VoiceInfo.Name).OrderBy(n => n).ToList();
+                list.AddRange(s.GetInstalledVoices().Where(v => v.Enabled).Select(v => v.VoiceInfo.Name).OrderBy(n => n));
             }
-            catch (Exception e) { Log.Write("voices: " + e.Message); return new List<string>(); }
+            catch (Exception e) { Log.Write("voices: " + e.Message); }
+            return list;
         }
 
         static SpeechSynthesizer? _preview;
 
+        /// <summary>voice "" = the system voice for the text's language.</summary>
         public static void Preview(string voice, int rate, int volume, string text)
         {
             Task.Run(() =>

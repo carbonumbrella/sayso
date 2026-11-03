@@ -124,7 +124,7 @@ def overlay_running():
 
 def assistant_title():
     """The card's caption: the assistant's current name, it can change at any time in the settings."""
-    return voice_settings.get("assistant_name") or "Мурмур"
+    return voice_settings.get("assistant_name") or "Сэйсо"
 
 
 def overlay(kind, text="", title=None, ms=0):
@@ -153,7 +153,67 @@ SPOKEN = {"text": ""}  # what the voice is saying now: a stop word inside the an
 EARLY = {}  # "text": first sentence already spoken while Gemma was still generating (web answers)
 
 
+def one_speaker():
+    """Setting tts_one_speaker: the voice plays on the left speaker only (tts_player.py), "стоп" is heard better."""
+    return bool(voice_settings.get("tts_one_speaker"))
+
+
+def _voice_setup(text):
+    voice = str(voice_settings.get("tts_voice") or "").replace("'", "")
+    if voice:
+        pick = f"try {{ $tts.SelectVoice('{voice}') }} catch {{}}; "
+    else:  # no voice chosen: one that speaks the reply's language (Russian text, English text)
+        culture = "ru" if re.search(r"[а-яё]", text, re.I) else "en"
+        pick = (f"$v = $tts.GetInstalledVoices() | ? {{ $_.VoiceInfo.Culture.Name -like '{culture}-*' }} | "
+                f"Select-Object -First 1; if ($v) {{ $tts.SelectVoice($v.VoiceInfo.Name) }}; ")
+    rate = max(-10, min(10, int(voice_settings.get("tts_rate"))))
+    vol = max(0, min(100, int(voice_settings.get("tts_volume"))))
+    return f"{pick}$tts.Rate = {rate}; $tts.Volume = {vol}; "
+
+
+_tts_n = [0]
+
+
+def _synth_wav(text, setup):
+    _tts_n[0] += 1
+    path = os.path.join(voice_settings.USER_DIR, f"tts_{os.getpid()}_{_tts_n[0]}.wav")
+    fmt = ("New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(24000, "
+           "[System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)")
+    rc, out = _ps_out(f"{setup}$tts.SpeakAsyncCancelAll(); $tts.SetOutputToWaveFile({_q(path)}, ({fmt})); "
+                      f"try {{ $tts.Speak({_q(text)}) }} finally {{ $tts.SetOutputToDefaultAudioDevice() }}")
+    if rc != 0:
+        log(f"tts to file failed: {out[-200:]}")
+        return None
+    return path
+
+
+def own_playback(text):
+    """Played by tts_player (one speaker only) instead of SAPI straight to the speakers."""
+    return one_speaker()
+
+
+def _say_one_speaker(text, after=False):
+    """The voice to wavs sentence by sentence by the host's SAPI (same voice settings); tts_player plays them,
+    on one speaker if set: the first sentence starts at once while the next ones are written. A stop drops the rest."""
+    import tts_player
+    setup = _voice_setup(text)
+    parts = [s for s in re.split(r"(?<=[.!?…:;])\s+|\n+", text) if s.strip()] or [text]
+    gen = None
+    for i, part in enumerate(parts):
+        path = _synth_wav(part, setup)
+        if path is None:
+            return
+        if gen is not None and tts_player.PLAYER.gen != gen:  # stopped meanwhile
+            tts_player._remove(path)
+            return
+        tts_player.PLAYER.play(path, after=after or i > 0, left_only=one_speaker())
+        gen = tts_player.PLAYER.gen
+
+
 def speak(text):
+    if EARLY.pop("cut", False):  # "стоп" (or a button press) over the early first sentence: drop the rest too
+        EARLY.pop("text", None)
+        return
     early = EARLY.pop("text", "")
     SPOKEN.update(text=text.lower(), t=time.time())
     _speak_pending.set()
@@ -163,18 +223,15 @@ def speak(text):
             if early and text.startswith(early):  # the start is already being said: queue only the rest
                 rest = text[len(early):].strip()
                 if rest:
-                    _ps_out(f"SayMore {_q(rest)}")
+                    if own_playback(early):  # the same engine as the start already playing
+                        _say_one_speaker(rest, after=True)
+                    else:
+                        _ps_out(f"SayMore {_q(rest)}")
                 return
-            voice = str(voice_settings.get("tts_voice") or "").replace("'", "")
-            if voice:
-                pick = f"try {{ $tts.SelectVoice('{voice}') }} catch {{}}; "
-            else:  # no voice chosen: one that speaks the reply's language (Russian text, English text)
-                culture = "ru" if re.search(r"[а-яё]", text, re.I) else "en"
-                pick = (f"$v = $tts.GetInstalledVoices() | ? {{ $_.VoiceInfo.Culture.Name -like '{culture}-*' }} | "
-                        f"Select-Object -First 1; if ($v) {{ $tts.SelectVoice($v.VoiceInfo.Name) }}; ")
-            rate = max(-10, min(10, int(voice_settings.get("tts_rate"))))
-            vol = max(0, min(100, int(voice_settings.get("tts_volume"))))
-            _ps_out(f"{pick}$tts.Rate = {rate}; $tts.Volume = {vol}; Say {_q(text)}")
+            if own_playback(text):
+                _say_one_speaker(text)
+            else:
+                _ps_out(f"{_voice_setup(text)}Say {_q(text)}")
         finally:
             _speak_pending.clear()
     threading.Thread(target=run, daemon=True).start()
@@ -183,6 +240,10 @@ def speak(text):
 def stop_speaking():
     """Cut the TTS voice now (button press, wake phrase, "стоп"): like a smart speaker, talking over it wins."""
     _speak_pending.clear()
+    if EARLY.get("text") is not None:  # an answer still being generated must not go on speaking afterwards
+        EARLY["cut"] = True
+    if "tts_player" in sys.modules:
+        sys.modules["tts_player"].PLAYER.stop()
     _ps_out("$tts.SpeakAsyncCancelAll()", timeout=5)
 
 
@@ -190,19 +251,30 @@ def speaking():
     """True while the TTS voice talks: the follow-up window must not hear the assistant itself."""
     if _speak_pending.is_set():
         return True
+    if "tts_player" in sys.modules and sys.modules["tts_player"].PLAYER.busy():
+        return True
     rc, out = _ps_out("[string]$tts.State", timeout=5)
     return out.strip() == "Speaking"
 
 
 def warm():
-    """Called once in the background by dictate.py: start the host and cache the Start menu apps."""
+    """Called once in the background by dictate.py: start the host and cache the Start menu apps, so the first
+    command does not pay for either."""
     _ps_out("1")
     start_apps()
 
 
+def speech_ms(text):
+    """About how long the voice reads text: the card stays up that long (the overlay's own cap is 9 s).
+    Russian SAPI voices read ~14 characters a second at rate 0, each rate step ~10% faster or slower."""
+    rate = max(-10, min(10, int(voice_settings.get("tts_rate") or 0)))
+    overlay_default = min(9000, 2600 + 45 * len(text))  # what the card got before: short answers keep that
+    return max(overlay_default, int(min(120, len(text) / (14 * (1 + rate * 0.1)) + 1.5) * 1000))
+
+
 def report(text, ok=True, vocal=False):
     log(("OK: " if ok else "FAIL: ") + text)
-    notify(text, assistant_title() if ok else f"{assistant_title()}: ошибка")
+    notify(text, assistant_title() if ok else f"{assistant_title()}: ошибка", ms=speech_ms(text) if vocal else 0)
     if vocal:
         speak(text)
 
@@ -350,7 +422,12 @@ interface IAudioEndpointVolume{int f0();int f1();int f2();int f3();int SetMaster
 int f5();int GetMasterVolumeLevelScalar(out float l);int f7();int f8();int f9();int f10();
 int SetMute([MarshalAs(UnmanagedType.Bool)]bool b,System.Guid c);int GetMute([MarshalAs(UnmanagedType.Bool)]out bool b);}
 [Guid("D666063F-1587-4E43-81F1-B948E807363F"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IMMDevice{int Activate(ref System.Guid id,int ctx,int p,[MarshalAs(UnmanagedType.IUnknown)]out object o);}
+interface IMMDevice{int Activate(ref System.Guid id,int ctx,int p,[MarshalAs(UnmanagedType.IUnknown)]out object o);
+int OpenPropertyStore(int access,out IPropertyStore s);}
+struct PropKey{public System.Guid g;public int pid;}
+[StructLayout(LayoutKind.Explicit,Size=24)]struct PropVar{[FieldOffset(0)]public short vt;[FieldOffset(8)]public int v;}
+[Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IPropertyStore{int f0();int f1();int GetValue(ref PropKey k,out PropVar v);}
 [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IMMDeviceEnumerator{int f();int GetDefaultAudioEndpoint(int d,int r,out IMMDevice e);}
 [ComImport,Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]class MMDeviceEnumerator{}
@@ -359,7 +436,33 @@ IMMDevice d;e.GetDefaultAudioEndpoint(flow,1,out d);var id=typeof(IAudioEndpoint
 return (IAudioEndpointVolume)o;}
 public static int Get(){float l;V(0).GetMasterVolumeLevelScalar(out l);return (int)System.Math.Round(l*100);}
 public static void Set(int p){var v=V(0);v.SetMute(false,System.Guid.Empty);v.SetMasterVolumeLevelScalar(p/100f,System.Guid.Empty);}
-public static void Mute(int flow,bool m){V(flow).SetMute(m,System.Guid.Empty);}}"""
+public static void Mute(int flow,bool m){V(flow).SetMute(m,System.Guid.Empty);}
+public static int FormFactor(){var e=(IMMDeviceEnumerator)new MMDeviceEnumerator();IMMDevice d;e.GetDefaultAudioEndpoint(0,1,out d);
+IPropertyStore s;d.OpenPropertyStore(0,out s);var k=new PropKey{g=new System.Guid("1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E"),pid=0};
+PropVar p;s.GetValue(ref k,out p);return p.v;}
+static System.Collections.Generic.List<IAudioSessionControl2> Sessions(){var e=(IMMDeviceEnumerator)new MMDeviceEnumerator();
+IMMDevice d;e.GetDefaultAudioEndpoint(0,1,out d);var id=typeof(IAudioSessionManager2).GUID;object o;d.Activate(ref id,23,0,out o);
+IAudioSessionEnumerator se;((IAudioSessionManager2)o).GetSessionEnumerator(out se);int n;se.GetCount(out n);
+var l=new System.Collections.Generic.List<IAudioSessionControl2>();for(int i=0;i<n;i++){IAudioSessionControl2 s;se.GetSession(i,out s);l.Add(s);}return l;}
+public static string DuckApps(float f,string keep){if(FormFactor()!=1)return "";var k=new System.Collections.Generic.HashSet<string>(keep.Split(','));
+var sb=new System.Text.StringBuilder();foreach(var s in Sessions()){uint pid;s.GetProcessId(out pid);
+if(s.IsSystemSoundsSession()==0||k.Contains(pid.ToString()))continue;var v=(ISimpleAudioVolume)s;float x;v.GetMasterVolume(out x);
+if(x<0.02f)continue;string id;s.GetSessionInstanceIdentifier(out id);var g=System.Guid.Empty;v.SetMasterVolume(x*f,ref g);
+sb.Append(id).Append('\t').Append(x.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append('\n');}return sb.ToString();}
+public static void UnduckApps(string state,float f){var was=new System.Collections.Generic.Dictionary<string,float>();
+foreach(var line in state.Split('\n')){var p=line.Split('\t');if(p.Length==2)was[p[0]]=float.Parse(p[1],System.Globalization.CultureInfo.InvariantCulture);}
+foreach(var s in Sessions()){string id;s.GetSessionInstanceIdentifier(out id);float x;if(!was.TryGetValue(id,out x))continue;
+var v=(ISimpleAudioVolume)s;float c;v.GetMasterVolume(out c);var g=System.Guid.Empty;if(System.Math.Abs(c-x*f)<0.02f)v.SetMasterVolume(x,ref g);}}}
+[Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionManager2{int f0();int f1();int GetSessionEnumerator(out IAudioSessionEnumerator e);}
+[Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionEnumerator{int GetCount(out int n);int GetSession(int i,out IAudioSessionControl2 s);}
+[Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionControl2{int f0();int f1();int f2();int f3();int f4();int f5();int f6();int f7();int f8();
+int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)]out string s);int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)]out string s);
+int GetProcessId(out uint p);[PreserveSig]int IsSystemSoundsSession();}
+[Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface ISimpleAudioVolume{int SetMasterVolume(float v,ref System.Guid c);int GetMasterVolume(out float v);}"""
 
 
 def _audio(call):
@@ -381,6 +484,25 @@ def volume(level=None, step=None, mute=None):
     level = max(0, min(100, int(level if level is not None else 50)))
     _audio(f"[Aud]::Set({level})")
     return f"Громкость {level} процентов"
+
+
+DUCK_FACTOR = 0.2  # other apps at 20% of their own volume while the assistant listens or talks (about -14 dB)
+
+
+def duck_on():
+    """Quieter OTHER apps while listening and answering, so the mic hears the user and the answer stays loud: the
+    per-app session volumes, not the master volume (that took the voice down too). Only on speakers (endpoint form
+    factor 1), not on headphones. Our own sessions are skipped: this process (beeps, tts_player) and the PowerShell
+    host (the SAPI voice). Returns the state to restore, or None when nothing was changed."""
+    if _host.p is None:
+        _ps_out("1")
+    keep = f"{os.getpid()},{_host.p.pid if _host.p else 0}"
+    return _audio(f"[Aud]::DuckApps({DUCK_FACTOR}, '{keep}')") or None
+
+
+def duck_off(state):
+    """Each app back to its old volume, unless the user has changed that app's volume in the meantime."""
+    _audio(f"[Aud]::UnduckApps({_q(state)}, {DUCK_FACTOR})")
 
 
 def mic(mute=True):
@@ -1554,10 +1676,15 @@ def speak_now(text):
 
     def run():
         try:
-            _ps_out(f"Say {_q(text)}")
+            if own_playback(text):
+                _say_one_speaker(text)
+            else:
+                _ps_out(f"Say {_q(text)}")
         finally:
             _speak_pending.clear()
     threading.Thread(target=run, daemon=True).start()
+    if on_speaking:  # "стоп" is heard from the first sentence on, not only after the whole answer (_finish)
+        on_speaking(True)
 
 
 def llm_voice():
@@ -1568,7 +1695,7 @@ def llm_voice():
 def gemma_load(on):
     """'загрузи / выгрузи Гемму': the state file is the switch, ensure_server() never starts Gemma while off."""
     if on and not voice_settings.gemma_dir():
-        return "Gemma не скачана. Её можно скачать в настройках, вкладка «Модель», вариант «На NPU»"
+        return "Gemma не скачана. Её можно скачать в настройках, вкладка «Модель», вариант «Локально»"
     with open(GEMMA_STATE, "w") as f:
         f.write("on" if on else "off")
     if on:
@@ -1656,7 +1783,7 @@ def system_prompt():
     if says:
         extra += ('- user_command {"say": str}  команда пользователя, "say" одна из: '
                   + "; ".join(says) + "\n")
-    name = voice_settings.get("assistant_name") or "Мурмур"
+    name = voice_settings.get("assistant_name") or "Сэйсо"
     return SYSTEM.replace("{name}", name).replace("{extra_tools}", extra)
 
 
@@ -1769,7 +1896,7 @@ def chat_reply(text):
     if not gemma_on():
         PENDING["load"] = time.time() + 20
         return "Для разговора нужна Gemma. Загрузить её?", True
-    name = voice_settings.get("assistant_name") or "Мурмур"
+    name = voice_settings.get("assistant_name") or "Сэйсо"
     msgs = [{"role": "system", "content": CHAT_SYSTEM.replace("{name}", name)}]
     L = last()
     if L and all(m["content"] != L["q"] for m in CHAT["history"]):  # the last command outside the chat,
@@ -2150,26 +2277,26 @@ HELP_SHORT = ("Я управляю звуком и яркостью, откры�
               "валют, ставлю таймеры. Скажи: отправь список команд в телеграм")
 HELP_FILE = os.path.join(HERE, "commands.txt")  # shown by the SaySo tray menu ("Что умеет")
 HELP_FULL = """🎙 SaySo: голосовой помощник
-
-🎙 Вызов: кнопка диктовки (держать) · кнопка команды (нажать) · по имени: «{name}, …» (от сети) · после ответа слушает · стоп перебивает
-💬 Разговор: повтори · отправь это в телеграм · скопируй · подробнее · а завтра? / а евро? · спасибо
-⌨️ Ввод: напиши … · допиши … · с новой строки … · отправь (Enter)
-✏️ Правка (кнопкой диктовки, фраза целиком): удали · удали слово / три слова · удали предложение · удали всё · замени … на … · новая строка · новый абзац · точка, запятая, вопрос · с большой / маленькой буквы · отмени, верни обратно · выдели / скопируй / вырежи всё · скопируй, вставь · в начало, в конец · отправить · «напиши удали» печатает само слово
-🗣 Разговор с Gemma: давай поговорим (о …) · дальше просто говори, команды тоже работают · хватит болтать · разово: скажи мне … / как думаешь … / посоветуй …
-🧠 Модель: выгрузи / загрузи Гемму (без неё работают все команды, кроме свободного разговора) · слушание вкл/выкл
-✍️ Свои команды: настройки → «Команды» (открыть сайт, программу, нажать клавиши, webhook)
-🔊 Система: громкость / яркость N, громче, тише · звук, микрофон, ночной свет вкл/выкл · пауза, следующий трек · сверни окна · заблокируй · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox
-ℹ️ Инфо: время · дата · заряд · диск · память · процессор · IP
-📂 Программы: открой / закрой любую программу или игру · открой ютуб · настройки блютуз · настройки SaySo / подсветки / kbdhaptic · обнови список приложений · найди файл … (по всему диску) · скопируй найденный файл · отправь этот файл в телеграм · открой найденный файл
-❓ Помощь: что ты умеешь · список команд · что ты умеешь с файлами (команды по теме) · отправь список команд в телеграм
+🎙 Как позвать: держи кнопку диктовки и говори: текст напечатается, где курсор · нажми кнопку команды и скажи команду · или скажи «{name}, …» (от сети, когда включено слушание) · после ответа я ещё слушаю несколько секунд · «стоп» перебивает ответ
+🔊 Звук и экран: громкость 40 · громче, тише · выключи / включи звук · яркость 70 · ночной свет вкл/выкл · микрофон вкл/выкл · пауза, следующий трек
+🖥 Окна и система: сверни окна · заблокируй · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox · выключи, перезагрузи, усыпи (с подтверждением)
+📂 Программы и файлы: открой / закрой любую программу или игру · открой ютуб · настройки блютуз · настройки SaySo / подсветки / kbdhaptic · обнови список приложений · найди файл … (по всему диску) · открой найденный файл · скопируй найденный файл
+⌨️ Печать командой: напиши … · допиши … · с новой строки … · отправь (нажмёт Enter)
+✏️ Правка голосом (кнопкой диктовки, фраза целиком): удали · удали слово / три слова · удали предложение · удали всё · замени … на … · новая строка · новый абзац · точка, запятая, вопрос · с большой / маленькой буквы · отмени, верни обратно · выдели / скопируй / вырежи всё · скопируй, вставь · в начало, в конец · отправить · «напиши удали» печатает само слово
 📸 Скриншоты (в «Изображения → Снимки экрана» и в буфер): скриншот · скриншот окна · скриншот области · открой папку скриншотов
-📨 Telegram: скриншот в телеграм · напиши в телеграм … · отправь файл / последнее фото / скачанный файл
-🌍 Интернет: я сейчас в … · где я · погода (завтра, в городе) · курс валют · что такое / кто такой · любые вопросы
-⏱ Прочее: таймер · напомни через … · калькулятор · выключи / перезагрузи / усыпи (с подтверждением)"""
+📨 Телеграм: скриншот в телеграм · напиши в телеграм … · отправь файл / последнее фото / скачанный файл · отправь этот файл в телеграм
+🌍 Интернет: погода · погода на завтра / в городе · курс валют · что такое … / кто такой … · любые вопросы · я сейчас в … · где я
+ℹ️ О компьютере: время · дата · заряд · диск · память · процессор · IP
+⏱ Таймеры: таймер на 10 минут · напомни через … · калькулятор
+💬 После ответа: повтори · подробнее · скопируй · отправь это в телеграм · а завтра? / а евро? · спасибо
+🗣 Разговор (нужна языковая модель): давай поговорим (о …) · дальше просто говори, команды тоже работают · хватит болтать · разово: скажи мне … / как думаешь … / посоветуй …
+🧠 Модель и слушание: выгрузи / загрузи Гемму (без неё работают все команды, кроме разговора) · включи / выключи слушание
+✍️ Свои команды: настройки → «Команды»: открыть сайт или программу, нажать клавиши, webhook
+❓ Помощь: что ты умеешь · список команд · что ты умеешь с файлами (команды по теме) · отправь список команд в телеграм"""
 
 
 def help_full():
-    name = voice_settings.get("assistant_name") or "Мурмур"
+    name = voice_settings.get("assistant_name") or "Сэйсо"
     return HELP_FULL.replace("{name}", name) + "".join("\n" + line for line in plugins.REG["help"])
 
 
@@ -2264,7 +2391,7 @@ def dialog_route(p):
     # "как дела" once gave "Я Тинка, 26 лет", and the dialog memory then repeated it)
     if re.fullmatch(r"(а\s+)?(ты\s+)?кто\s+ты(\s+такая)?|(а\s+)?ты\s+кто(\s+такая)?|как\s+тебя\s+зовут|"
                     r"представься|твоё имя|твое имя", p):
-        name = voice_settings.get("assistant_name") or "Мурмур"
+        name = voice_settings.get("assistant_name") or "Сэйсо"
         return f"Я {name}, голосовой помощник. Скажи: что ты умеешь", True
     if re.fullmatch(r"(ну\s+)?(а\s+)?(как\s+(у\s+тебя\s+|твои\s+|то\s+и\s+|ты\s+и\s+)?дела|как\s+ты|как\s+жизнь|как\s+поживаешь|что\s+нового)"
                     r"(\s+у\s+тебя)?", p):
@@ -2412,9 +2539,13 @@ def handle(text, dry=False):
             return
     said = SPOKEN.get("text", "")  # self-echo: its own (maybe cut) voice from the speakers, not a command
     norm = lambda t: re.sub(r"gemma|(?:дж|г)[еиэ]м+а", "гемма", t)  # Whisper hears "Gemma" as Гимма/Джемма
-    if not dry and said and time.time() - SPOKEN.get("t", 0) < 30 and len(p) >= 8 and difflib.SequenceMatcher(
-            None, norm(p), norm(said)[:len(p) + 4]).ratio() > 0.7:
+    # only while the voice can still be heard (its reading time + 3 s), and a number it did not say is the user's
+    # own ("громкость 20" right after "громкость 70 процентов" was dropped as echo and left the card hanging)
+    if not dry and said and time.time() - SPOKEN.get("t", 0) < speech_ms(said) / 1000 + 3 and len(p) >= 8 \
+            and set(re.findall(r"\d+", p)) <= set(re.findall(r"\d+", said)) \
+            and difflib.SequenceMatcher(None, norm(p), norm(said)[:len(p) + 4]).ratio() > 0.7:
         log(f"ignored self-echo: {text!r}")
+        overlay("hide")  # the "«...»" card of command() must not wait for an answer that never comes
         return
     if not dry and len(p.split()) == 1 and re.search(r"ключ|откр|закр|запуст|отправ|покаж|найди", p):
         report("Не поняла, что именно", vocal=True)  # a cut-off command ("выключаем."): Gemma would only guess

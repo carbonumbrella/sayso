@@ -76,18 +76,27 @@ namespace ClawVoice
         static void RenderPage(string tab, string png)
         {
             var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            // no app.Run() here: without this context the pages' awaits resume on the thread pool and throw
+            SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
             app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("pack://application:,,,/SaySo;component/Theme.xaml") });
             Theme.Apply(app.Resources);
             Window w;
             bool narrow = tab.EndsWith(":narrow");  // "main:narrow": the portrait Claw layout, 690 DIP wide
             tab = tab.Replace(":narrow", "");
             if (tab == "trainer") w = new TrainerWindow();
-            else if (tab == "wizard") w = new WizardWindow();
+            else if (tab.StartsWith("wizard")) { var z = new WizardWindow(); if (tab.Length > 6) z.GoTo(tab[6] - '0'); w = z; }  // wizard0..4
+            else if (tab == "skills") { var c = new CommandsWindow(); c.Width = narrow ? 690 : 1180; c.Relayout(c.Width); w = c; }
             else
             {
                 var s = new SettingsWindow(); s.Reload(); s.ShowTab(tab); w = s;
                 if (narrow) { Responsive.Preview(s, true, s.TabsGrid); s.Width = 690; }
             }
+            // let the async parts (models list, hardware, mics) arrive before the picture is taken
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            var wait = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+            wait.Tick += (_, _) => { wait.Stop(); frame.Continue = false; };
+            wait.Start();
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
             var root = (FrameworkElement)w.Content;
             w.Content = null;
             var holder = new Border { Background = System.Windows.Media.Brushes.DimGray, Child = root, Width = w.Width };
@@ -268,7 +277,7 @@ namespace ClawVoice
             m.Items.Add(gemma);
             m.Items.Add(new Forms.ToolStripSeparator());
             m.Items.Add("Настройки…", null, (_, _) => ShowSettings());
-            m.Items.Add("Подсветка…", null, (_, _) => OpenAmbilight());
+            if (AmbilightInstalled) m.Items.Add("Подсветка…", null, (_, _) => OpenAmbilight());
             m.Items.Add("Список команд", null, (_, _) => ShowCommands());
             m.Items.Add("Журнал диктовки", null, (_, _) => Stack.Open(Stack.DictateLog));
             m.Items.Add(restart);
@@ -293,34 +302,19 @@ namespace ClawVoice
 
         public void ShowCommands()
         {
-            string text;
-            try { text = File.ReadAllText(Stack.CommandsFile); }
-            catch { text = "Список появится после первого запуска диктовки."; }
-            var w = new Window
-            {
-                Title = "Команды", Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/app.ico")), Width = 640, SizeToContent = SizeToContent.Height, ResizeMode = ResizeMode.NoResize,
-                WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = System.Windows.Media.Brushes.Transparent,
-                WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text, Segoe UI"), FontSize = 14,
-            };
-            w.SetResourceReference(Control.ForegroundProperty, "Fg");
-            var close = new Button { Style = (Style)FindResource("Close"), HorizontalAlignment = HorizontalAlignment.Right };
-            close.Click += (_, _) => w.Close();
-            var body = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, LineHeight = 24, Margin = new Thickness(0, 6, 0, 0) };
-            var panel = new StackPanel { Margin = new Thickness(22, 16, 22, 20) };
-            panel.Children.Add(close);
-            panel.Children.Add(body);
-            w.Content = new Border { Style = (Style)FindResource("Frame"), Child = panel };
-            w.MouseLeftButtonDown += (_, _) => { try { w.DragMove(); } catch { } };
-            w.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Escape) w.Close(); };
+            var w = new CommandsWindow();
             w.Show();
             w.Activate();
         }
 
+        static string AmbilightExe => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            @"Programs\ClawAmbilight\ClawAmbilight.exe");
+
+        public static bool AmbilightInstalled => File.Exists(AmbilightExe);
+
         public static void OpenAmbilight()
         {
-            string exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                @"Programs\ClawAmbilight\ClawAmbilight.exe");
+            string exe = AmbilightExe;
             if (File.Exists(exe)) Stack.Open(exe);  // a second start of ClawAmbilight shows its window
         }
 

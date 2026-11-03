@@ -30,7 +30,13 @@ MODEL_DIR = os.environ.get("NPU_MODEL_DIR") or voice_settings.gemma_dir()
 if not MODEL_DIR:
     print("Gemma is not downloaded (Settings -> Model -> On NPU)", flush=True)
     sys.exit(0)
-DEVICE    = os.environ.get("NPU_DEVICE", "NPU")
+DEVICE    = os.environ.get("NPU_DEVICE") or voice_settings.get("llm_device") or "auto"
+if DEVICE.lower() == "auto":  # Settings -> Model -> Локально -> Авто: NPU, else an Intel GPU, else the CPU
+    import openvino as _ov
+    _core = _ov.Core()
+    _devs = _core.available_devices
+    _intel_gpu = "GPU" in _devs and "intel" in _core.get_property("GPU", "FULL_DEVICE_NAME").lower()
+    DEVICE = "NPU" if "NPU" in _devs else "GPU" if _intel_gpu else "CPU"
 IS_QWEN   = "qwen" in MODEL_DIR.lower()
 IS_VLM    = os.path.exists(os.path.join(MODEL_DIR, "openvino_language_model.xml"))
 MODEL_ID  = os.environ.get("NPU_MODEL_ID", "qwen3-4b-abliterated-npu" if IS_QWEN else "gemma-3-4b-npu")

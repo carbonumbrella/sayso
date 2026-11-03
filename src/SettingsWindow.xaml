@@ -1,6 +1,7 @@
 <Window x:Class="ClawVoice.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ClawVoice"
         Title="SaySo" Icon="app.ico" Width="900" SizeToContent="Height" ResizeMode="NoResize"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterScreen" ShowInTaskbar="True"
@@ -36,28 +37,52 @@
         <Grid x:Name="PageMain">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
           <StackPanel>
+            <!-- dictation-only install: the assistant parts are greyed until a model is chosen on the "Модель" tab -->
+            <Border x:Name="MinimalBanner" CornerRadius="14" Background="{DynamicResource Card}" Padding="14,10" Margin="0,14,0,0"
+                    BorderBrush="{DynamicResource Accent}" BorderThickness="1" Visibility="Collapsed">
+              <StackPanel>
+                <TextBlock Text="Установлена только диктовка" FontWeight="SemiBold"/>
+                <TextBlock Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,8"
+                           Text="Команды голосом, имя помощника, ответы голосом, Телеграм и плагины выключены. Кнопка ниже включает их сразу, языковая модель для разговора не обязательна."/>
+                <Button x:Name="EnableAssistantBtn" Content="Включить помощника" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White" HorizontalAlignment="Left"/>
+              </StackPanel>
+            </Border>
+            <TextBlock x:Name="AssistantOnNote" Visibility="Collapsed" FontSize="12" TextWrapping="Wrap" Margin="4,12,0,0"
+                       Foreground="{DynamicResource Sub}">
+              <Run Text="Помощник включён. Для свободного разговора можно подключить языковую модель на "/><Hyperlink x:Name="ToModelLink"
+                Foreground="{DynamicResource Accent}"><Run Text="вкладке «Модель»"/></Hyperlink><Run Text="."/>
+            </TextBlock>
             <TextBlock Text="ПОМОЩНИК" Style="{StaticResource Label}"/>
             <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
               <StackPanel>
                 <Grid Margin="0,8">
                   <StackPanel Margin="0,0,56,0">
-                    <TextBlock Text="Диктовка и голосовые команды" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="Диктовка и голосовые команды" FontWeight="SemiBold"/>
+                      <local:HelpTip Text="Главный выключатель SaySo. Держи кнопку диктовки и говори: текст появится там, где стоит курсор. Кнопка команды: нажми и скажи, что сделать. Выключено: кнопки не работают, модель распознавания выгружается из памяти. Нагрузка: распознавание работает, только пока ты говоришь, в покое почти ноль."/>
+                    </StackPanel>
                     <TextBlock x:Name="DictationSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
                   <CheckBox x:Name="DictationSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                 </Grid>
                 <Border Height="1" Background="{DynamicResource Border}"/>
-                <Grid Margin="0,8">
+                <Grid x:Name="ListenRow" Margin="0,8">
                   <StackPanel Margin="0,0,56,0">
-                    <TextBlock x:Name="ListenTitle" Text="Откликаться на имя" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock x:Name="ListenTitle" Text="Откликаться на имя" FontWeight="SemiBold"/>
+                      <local:HelpTip Text="Помощник слушает микрофон и откликается, когда фраза начинается с его имени: «Сэйсо, громкость сорок». Работает только от сети, от батареи выключается само. Нагрузка: микрофон всё время открыт, детектор речи берёт около 1% процессора, каждая услышанная фраза распознаётся."/>
+                    </StackPanel>
                     <TextBlock x:Name="ListenSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
                   <CheckBox x:Name="ListenSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                 </Grid>
-                <Border Height="1" Background="{DynamicResource Border}"/>
-                <Grid Margin="0,8">
+                <Border x:Name="GemmaLine" Height="1" Background="{DynamicResource Border}"/>
+                <Grid x:Name="GemmaRow" Margin="0,8">
                   <StackPanel Margin="0,0,56,0">
-                    <TextBlock x:Name="GemmaTitle" Text="Модель загружена" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock x:Name="GemmaTitle" Text="Модель загружена" FontWeight="SemiBold"/>
+                      <local:HelpTip Text="Локальная Gemma 3 4B отвечает на свободные вопросы и разбирает необычные команды. Включена: около 3.8 ГБ оперативной памяти, NPU занят только во время ответа. Выключена: память свободна, простые команды и поиск в интернете работают без неё. Вариант модели выбирается на вкладке «Модель»."/>
+                    </StackPanel>
                     <TextBlock x:Name="GemmaSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
                   <CheckBox x:Name="GemmaSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
@@ -69,7 +94,10 @@
               <StackPanel>
                 <Grid Margin="0,8">
                   <StackPanel Margin="0,0,56,0">
-                    <TextBlock Text="Микрофон всегда готов от сети" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="Микрофон всегда готов от сети" FontWeight="SemiBold"/>
+                      <local:HelpTip Text="От сети микрофон не закрывается между командами: запись начинается сразу и захватывает 0.4 с до нажатия. От батареи он закрывается ради экономии, и на медленных микрофонах первое слово может потеряться. Нагрузка: почти никакой, но Windows всё время показывает значок микрофона."/>
+                    </StackPanel>
                     <TextBlock Text="Быстрее отклик, пока включено слушание имени" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
                   <CheckBox x:Name="WarmSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
@@ -77,7 +105,21 @@
                 <Border Height="1" Background="{DynamicResource Border}"/>
                 <Grid Margin="0,8">
                   <StackPanel Margin="0,0,56,0">
-                    <TextBlock Text="Запускать вместе с Windows" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="Звуковой сигнал" FontWeight="SemiBold"/>
+                      <local:HelpTip Text="Короткий писк, когда запись началась (можно говорить), когда она закончилась и когда помощник ждёт следующую фразу. Выключи, если мешает: карточка на экране всё равно покажет, что идёт запись."/>
+                    </StackPanel>
+                    <TextBlock Text="Писк при нажатии кнопки и в конце записи" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                  </StackPanel>
+                  <CheckBox x:Name="BeepSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+                <Border Height="1" Background="{DynamicResource Border}"/>
+                <Grid Margin="0,8">
+                  <StackPanel Margin="0,0,56,0">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="Запускать вместе с Windows" FontWeight="SemiBold"/>
+                      <local:HelpTip Text="SaySo стартует при входе в Windows и сам запускает диктовку (и Gemma, если она не выгружена). Выключено: запускай с ярлыка, когда нужно."/>
+                    </StackPanel>
                     <TextBlock Text="Помощник, диктовка и модель (если не выгружена)" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
                   <CheckBox x:Name="AutostartSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
@@ -86,7 +128,10 @@
             </Border>
           </StackPanel>
           <StackPanel Grid.Column="2">
-            <TextBlock Text="СОЧЕТАНИЯ КЛАВИШ" Style="{StaticResource Label}"/>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="СОЧЕТАНИЯ КЛАВИШ" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Диктовка: держи сочетание, пока говоришь, отпусти, и текст вставится в окно с курсором. Команда: нажми один раз и скажи фразу за несколько секунд. Сочетания работают поверх игр и не доходят до них. Кнопку на корпусе (например, M1 на MSI Claw) назначь в её утилите на то же сочетание."/>
+            </StackPanel>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition/></Grid.ColumnDefinitions>
               <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="8"/><RowDefinition/></Grid.RowDefinitions>
@@ -103,12 +148,12 @@
               <Button x:Name="HotkeyReset" Content="По умолчанию" Style="{StaticResource Flat}" Height="30" FontSize="12"
                       HorizontalAlignment="Right" VerticalAlignment="Top"/>
             </Grid>
-            <Grid Margin="0,22,0,0">
-              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
-              <Button x:Name="CommandsBtn" Content="Что умеет" Style="{StaticResource Flat}"/>
-              <Button x:Name="AmbiBtn" Grid.Column="2" Content="Подсветка" Style="{StaticResource Flat}"/>
-              <Button x:Name="LogBtn" Grid.Column="4" Content="Журнал" Style="{StaticResource Flat}"/>
-            </Grid>
+            <!-- "Подсветка" only where ClawAmbilight is installed (the Claw): elsewhere two buttons share the row -->
+            <UniformGrid x:Name="MainButtons" Rows="1" Margin="0,22,-8,0">
+              <Button x:Name="CommandsBtn" Content="Что умеет" Style="{StaticResource Flat}" Margin="0,0,8,0"/>
+              <Button x:Name="AmbiBtn" Content="Подсветка" Style="{StaticResource Flat}" Margin="0,0,8,0"/>
+              <Button x:Name="LogBtn" Content="Журнал" Style="{StaticResource Flat}" Margin="0,0,8,0"/>
+            </UniformGrid>
           </StackPanel>
         </Grid>
 
@@ -116,7 +161,11 @@
         <Grid x:Name="PageVoice" Visibility="Collapsed">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
           <StackPanel>
-            <TextBlock Text="ИМЯ ПОМОЩНИКА" Style="{StaticResource Label}"/>
+            <StackPanel x:Name="NameSection">
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="ИМЯ ПОМОЩНИКА" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Слово, на которое откликается помощник, и так он себя называет. Лучше всего имя из 2-3 слогов, не похожее на частые слова. «Тренировать имя»: скажешь имя несколько раз, и SaySo запомнит, как распознаватель слышит именно твоё произношение. Пропусков становится меньше."/>
+            </StackPanel>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <TextBox x:Name="NameBox" Style="{StaticResource Field}"/>
@@ -124,11 +173,15 @@
             </Grid>
             <Grid Margin="0,6,0,0">
               <TextBlock x:Name="NameHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,120,0"
-                         Text="Зови по имени в начале фразы: «Мурмур, громкость сорок»."/>
+                         Text="Зови по имени в начале фразы: «Сэйсо, громкость сорок»."/>
               <Button x:Name="TrainBtn" Content="Тренировать имя" Style="{StaticResource Flat}" Height="30" FontSize="12"
                       HorizontalAlignment="Right" VerticalAlignment="Top"/>
             </Grid>
-            <TextBlock Text="ЯЗЫК" Style="{StaticResource Label}"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="ЯЗЫК" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Язык распознавания и ответов. «Авто»: распознаватель сам определяет язык каждой фразы, это чуть медленнее и на коротких фразах иногда ошибается. Применяется перезапуском диктовки, он занимает несколько секунд."/>
+            </StackPanel>
             <Border Style="{StaticResource SegBox}">
               <UniformGrid Rows="1">
                 <RadioButton x:Name="LangRu" Content="Русский" GroupName="lang" Style="{StaticResource Seg}"/>
@@ -136,17 +189,35 @@
                 <RadioButton x:Name="LangAuto" Content="Авто" GroupName="lang" Style="{StaticResource Seg}"/>
               </UniformGrid>
             </Border>
-            <TextBlock Text="МИКРОФОН" Style="{StaticResource Label}"/>
+            <TextBlock Text="МИКРОФОН" Style="{StaticResource Label}" ToolTip="«По умолчанию» берёт микрофон, выбранный в Windows"/>
             <ComboBox x:Name="MicBox" Style="{StaticResource Combo}"/>
-            <TextBlock Text="СЛУШАТЬ ПОСЛЕ ОТВЕТА" Style="{StaticResource Label}"/>
-            <Grid>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="ОБРАБОТКА МИКРОФОНА" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Аппаратная: звук чистит сам драйвер микрофона, если умеет (Intel Smart Sound на MSI Claw убирает шум, музыку и голос помощника). Под музыкой ошибок в разы меньше, процессор не нагружается. Если другая программа держит микрофон в том же режиме (например, открытая страница «Звук» в Параметрах), очистка слабеет. Обычная: звук как есть, для внешних микрофонов и гарнитур со своей обработкой."/>
+            </StackPanel>
+            <Border Style="{StaticResource SegBox}">
+              <UniformGrid Rows="1">
+                <RadioButton x:Name="MicProcHw" Content="Аппаратная" GroupName="micproc" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="MicProcOff" Content="Обычная" GroupName="micproc" Style="{StaticResource Seg}"/>
+              </UniformGrid>
+            </Border>
+            <TextBlock x:Name="MicProcHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,6,0,0"
+                       Text="Аппаратная работает, если драйвер это умеет, иначе как обычная."/>
+            <StackPanel x:Name="FollowLabel" Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="СЛУШАТЬ ПОСЛЕ ОТВЕТА" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Сколько секунд после ответа помощник ждёт следующую фразу без имени и без кнопки, как в разговоре. 0: не ждёт. Пока он слушает, музыка и видео звучат тише."/>
+            </StackPanel>
+            <Grid x:Name="FollowRow">
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="60"/></Grid.ColumnDefinitions>
               <Slider x:Name="FollowSlider" Minimum="0" Maximum="15" TickFrequency="1" IsSnapToTickEnabled="True"/>
               <TextBlock x:Name="FollowText" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold"/>
             </Grid>
           </StackPanel>
-          <StackPanel Grid.Column="2">
-            <TextBlock Text="ГОЛОС ОТВЕТОВ" Style="{StaticResource Label}"/>
+          <StackPanel x:Name="VoiceSection" Grid.Column="2">
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="ГОЛОС ОТВЕТОВ" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Голоса Windows. По умолчанию для русского: Microsoft Irina. Другие голоса добавляются в Параметрах Windows: «Время и язык», «Речь». Скорость и громкость меняют только голос помощника, не общую громкость. Нагрузка: голос синтезирует Windows, это почти не нагружает процессор."/>
+            </StackPanel>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <ComboBox x:Name="VoiceBox" Style="{StaticResource Combo}"/>
@@ -171,17 +242,32 @@
         <Grid x:Name="PageModel" Visibility="Collapsed">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
           <StackPanel>
-            <TextBlock Text="ЯЗЫКОВАЯ МОДЕЛЬ (НЕОБЯЗАТЕЛЬНО)" Style="{StaticResource Label}"/>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="ПОМОЩНИК И ЯЗЫКОВАЯ МОДЕЛЬ" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Модель нужна для разговора и необычных команд. Без модели работают команды из «Что умеет», погода, поиск и Википедия, нагрузки нет. Локально: Gemma 3 4B прямо на этом ПК (NPU, видеокарта или процессор), 3.3 ГБ на диске и около 4 ГБ памяти, ничего не уходит в интернет. Свой сервер: Ollama, LM Studio и другие на этом или соседнем ПК, нагрузка там. Облако: Gemini и подобные, быстро и без нагрузки, но фразы для модели уходят в интернет, нужен ключ."/>
+            </StackPanel>
             <Border Style="{StaticResource SegBox}">
               <UniformGrid Rows="1">
                 <RadioButton x:Name="ProvNone" Content="Без модели" GroupName="prov" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="ProvNpu" Content="На NPU" GroupName="prov" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="ProvNpu" Content="Локально" GroupName="prov" Style="{StaticResource Seg}"/>
                 <RadioButton x:Name="ProvServer" Content="Свой сервер" GroupName="prov" Style="{StaticResource Seg}"/>
                 <RadioButton x:Name="ProvCloud" Content="Облако" GroupName="prov" Style="{StaticResource Seg}"/>
               </UniformGrid>
             </Border>
             <TextBlock x:Name="ProvHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
             <StackPanel x:Name="NpuFields" Visibility="Collapsed">
+              <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+                <TextBlock Text="ГДЕ ЗАПУСКАТЬ GEMMA" Style="{StaticResource Label}" Margin="0"/>
+                <local:HelpTip Text="NPU: экономно, видеокарта остаётся играм, около 3.8 ГБ памяти. Видеокарта: быстрее всего (короткий ответ за полсекунды), около 3.7 ГБ, но делит её с играми. Процессор: работает на любом ПК, но медленно (60 слов около 16 секунд) и берёт 4.6 ГБ памяти. Авто: NPU, если он есть, иначе видеокарта, иначе процессор. Смена перезагружает модель."/>
+              </StackPanel>
+              <Border Style="{StaticResource SegBox}">
+                <UniformGrid Rows="1">
+                  <RadioButton x:Name="LlmDevAuto" Content="Авто" GroupName="llmdev" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="LlmDevNpu" Content="NPU" GroupName="llmdev" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="LlmDevGpu" Content="Видеокарта" GroupName="llmdev" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="LlmDevCpu" Content="Процессор" GroupName="llmdev" Style="{StaticResource Seg}"/>
+                </UniformGrid>
+              </Border>
               <TextBlock x:Name="GemmaState" FontSize="12" TextWrapping="Wrap" Margin="4,10,0,0"/>
               <StackPanel x:Name="GemmaGet">
                 <TextBlock Text="ТОКЕН HUGGING FACE (НЕ СОХРАНЯЕТСЯ)" Style="{StaticResource Label}"/>
@@ -214,13 +300,16 @@
             <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
               <Grid Margin="0,8">
                 <StackPanel Margin="0,0,56,0">
-                  <TextBlock Text="Полностью офлайн" FontWeight="SemiBold"/>
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Полностью офлайн" FontWeight="SemiBold"/>
+                    <local:HelpTip Text="Помощник ничего не отправляет в сеть: нет погоды, поиска, Википедии и облачной модели. Распознавание речи всегда работает на этом ПК, с этим переключателем и без него."/>
+                  </StackPanel>
                   <TextBlock Text="Без погоды, поиска, Википедии и облачной модели. Диктовка и команды работают" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                 </StackPanel>
                 <CheckBox x:Name="OfflineSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
               </Grid>
             </Border>
-            <TextBlock Text="ГОРОД ДЛЯ ПОГОДЫ" Style="{StaticResource Label}"/>
+            <TextBlock Text="ГОРОД ДЛЯ ПОГОДЫ" Style="{StaticResource Label}" ToolTip="Для ответов о погоде. Хранится только на этом ПК, можно сказать и голосом: «мой город Москва»"/>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <TextBox x:Name="CityBox" Style="{StaticResource Field}"/>
@@ -231,8 +320,13 @@
         </Grid>
 
         <!-- ================= telegram ================= -->
-        <StackPanel x:Name="PageTg" Visibility="Collapsed" MaxWidth="560" HorizontalAlignment="Left">
-          <TextBlock Text="СВОЙ БОТ В ТЕЛЕГРАМЕ" Style="{StaticResource Label}"/>
+        <Grid x:Name="PageTg" Visibility="Collapsed">
+          <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+            <TextBlock Text="СВОЙ БОТ В ТЕЛЕГРАМЕ" Style="{StaticResource Label}" Margin="0"/>
+            <local:HelpTip Text="По команде помощник присылает в твой личный бот скриншоты, файлы и ответы: «сделай скриншот и отправь в телеграм», «отправь это в телеграм». Бот твой собственный, сообщения идут только в твой чат. Токен хранится зашифрованным и читается только этим пользователем Windows."/>
+          </StackPanel>
           <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Sub}" FontSize="12" Margin="4,0,0,8"
                      Text="1. Создай бота у @BotFather и скопируй токен.  2. Вставь токен ниже.  3. Напиши своему боту /start.  4. Нажми «Привязать»."/>
           <PasswordBox x:Name="TgTokenBox" Style="{StaticResource Secret}"/>
@@ -242,13 +336,33 @@
             <Button x:Name="TgTestBtn" Grid.Column="2" Content="Отправить проверку" Style="{StaticResource Flat}"/>
           </Grid>
           <TextBlock x:Name="TgStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
-        </StackPanel>
+          </StackPanel>
+          <!-- what the linked bot is for: the voice phrases that use it -->
+          <StackPanel Grid.Column="2">
+            <TextBlock Text="ЧТО МОЖНО СКАЗАТЬ" Style="{StaticResource Label}"/>
+            <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="16,12">
+              <TextBlock TextWrapping="Wrap" LineHeight="22">
+                <Run Text="«Скриншот в телеграм»"/><LineBreak/>
+                <Run Text="«Напиши в телеграм купить хлеб»"/><LineBreak/>
+                <Run Text="«Отправь последнее фото» или «отправь скачанный файл»"/><LineBreak/>
+                <Run Text="«Найди файл отчёт», потом «отправь этот файл в телеграм»"/><LineBreak/>
+                <Run Text="После ответа: «отправь это в телеграм»"/><LineBreak/>
+                <Run Text="«Отправь список команд в телеграм»"/>
+              </TextBlock>
+            </Border>
+            <TextBlock Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"
+                       Text="Сообщения идут только в твой чат с твоим ботом. Команды из Телеграма помощник не принимает."/>
+          </StackPanel>
+        </Grid>
 
         <!-- ================= commands ================= -->
         <Grid x:Name="PageCmd" Visibility="Collapsed">
           <Grid.ColumnDefinitions><ColumnDefinition Width="300"/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
           <StackPanel>
-            <TextBlock Text="МОИ КОМАНДЫ" Style="{StaticResource Label}"/>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="МОИ КОМАНДЫ" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Свои фразы и что по ним делать: открыть сайт, программу или папку, нажать сочетание клавиш, напечатать текст, вызвать webhook или команду PowerShell (её помощник сначала покажет и спросит). Срабатывают раньше встроенных команд и без языковой модели. Звёздочка в фразе ловит любой хвост: «найди в ютубе *». «Проверить фразу» показывает, какая команда сработает."/>
+            </StackPanel>
             <ListBox x:Name="CmdList" Style="{StaticResource Rows}" Height="250"/>
             <Grid Margin="0,8,0,0">
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
@@ -282,7 +396,10 @@
 
         <!-- ================= plugins ================= -->
         <StackPanel x:Name="PagePlug" Visibility="Collapsed">
-          <TextBlock Text="ПЛАГИНЫ" Style="{StaticResource Label}"/>
+          <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+            <TextBlock Text="ПЛАГИНЫ" Style="{StaticResource Label}" Margin="0"/>
+            <local:HelpTip Text="Плагины добавляют команды для отдельных программ, например подсветку ClawAmbilight или настройки ClawTweaks. Плагин без своей программы просто молчит. Выключенный плагин не загружается и не слушает свои фразы."/>
+          </StackPanel>
           <ListBox x:Name="PlugList" Style="{StaticResource Rows}" Height="300"/>
           <Grid Margin="0,10,0,0">
             <TextBlock Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,200,0" VerticalAlignment="Center"
@@ -295,7 +412,10 @@
         <Grid x:Name="PageSys" Visibility="Collapsed">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
           <StackPanel>
-            <TextBlock Text="РАСПОЗНАВАНИЕ РЕЧИ" Style="{StaticResource Label}"/>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="ГДЕ РАСПОЗНАВАТЬ РЕЧЬ" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="NPU: экономно, видеокарта остаётся играм. Видеокарта: быстрее всего, но делит её с играми. Процессор: работает на любом ПК, медленнее и нагружает ядра, пока идёт распознавание. Авто: NPU, если он есть, иначе видеокарта, иначе процессор. Смена перезапускает диктовку."/>
+            </StackPanel>
             <Border Style="{StaticResource SegBox}">
               <UniformGrid Rows="1">
                 <RadioButton x:Name="DevAuto" Content="Авто" GroupName="dev" Style="{StaticResource Seg}"/>
@@ -305,16 +425,36 @@
               </UniformGrid>
             </Border>
             <TextBlock x:Name="HwText" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0" Text="Определяю железо…"/>
-            <TextBlock Text="ДАННЫЕ" Style="{StaticResource Label}"/>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="МОДЕЛЬ РАСПОЗНАВАНИЯ" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Быстрая (Whisper small, 244 МБ, около 0.8 ГБ памяти): хорошо в тишине, под музыкой ошибается чаще. Точная (Whisper large-v3 turbo, 0.8 ГБ на видеокарте и процессоре, 1.6 ГБ для NPU; 1.3-2 ГБ памяти): почти без ошибок даже под музыкой. Замер на MSI Claw 8 AI+, 16 с речи: быстрая 0.35 с на NPU, 0.8 с на видеокарте, 2.3 с на процессоре; точная 1.6 с на NPU, 0.5 с на видеокарте, 9.5 с на процессоре. Ошибок в тишине и под музыкой: быстрая 7% и 21%, точная 0% и 4%. Обе модели работают на NPU, видеокарте и процессоре; точная на NPU в первый раз готовится около 6 минут, пока работает быстрая. Авто: точная на видеокарте без NPU, иначе быстрая. Нужной модели нет: она скачается."/>
+            </StackPanel>
+            <Border Style="{StaticResource SegBox}">
+              <UniformGrid Rows="1">
+                <RadioButton x:Name="SttAuto" Content="Авто" GroupName="stt" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="SttSmall" Content="Быстрая" GroupName="stt" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="SttTurbo" Content="Точная" GroupName="stt" Style="{StaticResource Seg}"/>
+              </UniformGrid>
+            </Border>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="СКАЧАННЫЕ МОДЕЛИ" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Необязательные модели можно скачать и удалить, чтобы освободить диск. Ту модель, что сейчас распознаёт речь, удалить нельзя: сначала выбери другую выше. Точная модель для NPU при первом запуске готовится около 6 минут, всё это время работает быстрая. Gemma скачивается на вкладке «Модель», нужен токен Hugging Face."/>
+            </StackPanel>
+            <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
+              <StackPanel x:Name="ModelRows"/>
+            </Border>
+            <TextBlock x:Name="ModelsStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+          </StackPanel>
+          <StackPanel Grid.Column="2">
+            <TextBlock Text="ДАННЫЕ" Style="{StaticResource Label}" ToolTip="Экспорт сохраняет настройки, имя, команды и плагины в zip на рабочий стол, без токенов и ключей"/>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
               <Button x:Name="ExportBtn" Content="Экспорт настроек" Style="{StaticResource Flat}"/>
               <Button x:Name="ImportBtn" Grid.Column="2" Content="Импорт" Style="{StaticResource Flat}"/>
             </Grid>
-            <Button x:Name="DiagBtn" Content="Собрать отчёт для диагностики" Style="{StaticResource Flat}" Margin="0,8,0,0"/>
+            <Button x:Name="DiagBtn" Content="Собрать отчёт для диагностики" Style="{StaticResource Flat}" Margin="0,8,0,0"
+                    ToolTip="Журналы, настройки и сведения о железе в zip на рабочий стол, без токенов и ключей"/>
             <TextBlock x:Name="SysStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
-          </StackPanel>
-          <StackPanel Grid.Column="2">
             <TextBlock Text="ОБНОВЛЕНИЯ" Style="{StaticResource Label}"/>
             <TextBlock x:Name="VersionText" FontWeight="SemiBold"/>
             <Button x:Name="UpdateBtn" Content="Проверить обновления" Style="{StaticResource Flat}" Margin="0,10,0,0"/>

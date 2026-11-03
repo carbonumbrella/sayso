@@ -1,7 +1,6 @@
 # Push-to-talk dictation: Whisper (OpenVINO), text pasted into the focused window.
-# Device: NPU default with whisper-small (~0.35s per 10s speech, iGPU stays free for games).
-# DICTATE_DEVICE=GPU or CPU switches to large-v3-turbo (GPU ~0.4s, CPU ~7.5s). large-v3-turbo
-# on the NPU hits DEVICE_LOST under OV 2026.4.1, so the NPU gets the small model only.
+# Device: NPU default (iGPU stays free for games). Model: setting stt_model, small or large-v3-turbo
+# (voice_settings.WHISPER has the catalog and the measurements); the NPU runs turbo only as its fp16 build.
 # Hold to talk on Ctrl+Alt+Win+W: the rear M1 button sends it from ClawTweaks keyboard
 # mode, held while pressed (keyprobe 2026-10-26). Registered with RegisterHotKey, so the
 # keystroke is swallowed and games never see it. No gamepad chord (games would see it).
@@ -13,10 +12,10 @@
 # Latency: on AC power the mic stays open (warm) with a 0.4 s pre-roll, because waking the mic from
 # idle took 0.8-2.2 s on this Claw. On battery it is closed and opened per press (user choice: save
 # power, accept the delay). DICTATE_WARM_MIC=0 never keeps it warm. Beeps are async WAVs.
-# Wake phrase "привет, Гемма ..." (wake.py: Silero VAD + this Whisper) works on AC power while
+# Wake phrase "<name>, ..." (wake.py: Silero VAD + this Whisper) works on AC power while
 # listening is on; "выключи/включи слушание" toggles it (by voice or via the Gemma button), the
 # state survives restarts in listen_state.txt.
-import os, re, sys, json, time, socket, subprocess, threading, winsound, ctypes, collections, wave
+import os, re, sys, json, time, queue, socket, subprocess, threading, winsound, ctypes, collections, wave
 import ctypes.wintypes as wt
 import numpy as np
 import sounddevice as sd
@@ -64,12 +63,27 @@ def _crashed_on():
 
 
 def _model_for(device):
-    """small on the NPU (medium/large crash the Claw's NPU) and when nothing else is there; large-v3-turbo
-    on a GPU/CPU if downloaded (better accuracy), else small."""
-    small, large = os.path.join(HERE, "whisper-small-int8-ov"), os.path.join(HERE, "whisper-large-v3-turbo-int8-ov")
+    """Setting stt_model (voice_settings.WHISPER): the chosen model when it is downloaded, else another one that is,
+    small first. The NPU build of turbo is used only once compiled (NPU_READY): until then small runs and
+    _prepare_npu() compiles it in the background (~6 min the first time)."""
     if os.environ.get("DICTATE_MODEL"):
         return os.path.join(HERE, os.environ["DICTATE_MODEL"])
-    return large if device != "NPU" and os.path.isdir(large) else small
+    want = _vs.whisper_key(_vs.get("stt_model"), device)
+    order = [want] + [k for k in ("small", "turbo") if k != want and device in _vs.WHISPER[k]["devices"]]
+    for key in order:
+        if _vs.whisper_complete(key) and (key != "turbo-npu" or os.path.exists(_npu_ready(key))):
+            return _vs.whisper_dir(key)
+    return _vs.whisper_dir("small")
+
+
+def _cache_dir(model):
+    # small keeps the old shared folder; other models one of their own (removed together with the model)
+    name = os.path.basename(model)
+    return os.path.join(HERE, "npu_cache") if "small" in name else os.path.join(HERE, "npu_cache", name)
+
+
+def _npu_ready(key):
+    return os.path.join(_cache_dir(_vs.whisper_dir(key)), "ready")
 
 
 DEVICE = _pick_device()
@@ -101,13 +115,13 @@ if _noted:
     with open(LOADING_FILE, "w") as _f:
         _f.write(DEVICE)
 try:
-    pipe = ov_genai.WhisperPipeline(MODEL, DEVICE, CACHE_DIR=os.path.join(HERE, "npu_cache"))
+    pipe = ov_genai.WhisperPipeline(MODEL, DEVICE, CACHE_DIR=_cache_dir(MODEL))
 except Exception as e:  # an old NPU/GPU driver: fall back instead of leaving the user without dictation
     print(f"Whisper on {DEVICE} failed ({e!r}), falling back", flush=True)
     for DEVICE in [d for d in ("GPU", "CPU") if d != DEVICE]:
         try:
             MODEL = _model_for(DEVICE)
-            pipe = ov_genai.WhisperPipeline(MODEL, DEVICE, CACHE_DIR=os.path.join(HERE, "npu_cache"))
+            pipe = ov_genai.WhisperPipeline(MODEL, DEVICE, CACHE_DIR=_cache_dir(MODEL))
             break
         except Exception as e2:
             print(f"Whisper on {DEVICE} failed too ({e2!r})", flush=True)
@@ -117,6 +131,49 @@ if _noted:  # loaded: not a crash. A note we skipped (previous crash) stays, the
     os.remove(LOADING_FILE)
 print(f"Whisper {os.path.basename(MODEL)} on {DEVICE}, language {LANG or 'auto'}", flush=True)
 whisper_lock = threading.Lock()  # hotkey recordings and the wake listener share one pipeline
+STATE_FILE = os.path.join(HERE, "stt_state.json")  # what is loaded, for the settings (model in use, one being prepared)
+
+
+def write_state(preparing=""):
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"model": os.path.basename(MODEL), "device": DEVICE, "preparing": preparing}, f)
+    except OSError:
+        pass
+
+
+def _prepare_npu():
+    """turbo chosen on the NPU but not compiled yet: compile it in a separate low-priority process while small
+    dictates, then switch to it here without a restart."""
+    global pipe, MODEL
+    key = _vs.whisper_key(_vs.get("stt_model"), DEVICE)
+    if DEVICE != "NPU" or key != "turbo-npu" or not _vs.whisper_complete(key) or os.path.exists(_npu_ready(key)):
+        return
+    model = _vs.whisper_dir(key)
+    print(f"compiling {os.path.basename(model)} for the NPU in the background (~6 min)", flush=True)
+    write_state(key)
+    code = ("import sys, openvino_genai as g; g.WhisperPipeline(sys.argv[1], 'NPU', CACHE_DIR=sys.argv[2]); "
+            "open(sys.argv[3], 'w').write('ok')")
+    r = subprocess.run([sys.executable, "-c", code, model, _cache_dir(model), _npu_ready(key)],
+                       creationflags=0x08000000 | 0x00004000, capture_output=True, text=True)  # no window, below normal
+    if r.returncode or not os.path.exists(_npu_ready(key)):
+        print(f"NPU compile failed: {(r.stderr or r.stdout).strip()[-300:]}", flush=True)
+        write_state()
+        return
+    try:
+        new = ov_genai.WhisperPipeline(model, "NPU", CACHE_DIR=_cache_dir(model))  # from the cache: seconds
+    except Exception as e:
+        print(f"switching to {os.path.basename(model)} failed: {e!r}", flush=True)
+        write_state()
+        return
+    with whisper_lock:
+        pipe, MODEL = new, model
+    write_state()
+    print(f"Whisper {os.path.basename(MODEL)} on {DEVICE} (compiled in the background)", flush=True)
+
+
+write_state()
+threading.Thread(target=_prepare_npu, daemon=True).start()
 LISTEN_FILE = os.path.join(HERE, "listen_state.txt")
 listening = not os.path.exists(LISTEN_FILE) or open(LISTEN_FILE).read().strip() != "0"
 wake_listener = None
@@ -130,8 +187,18 @@ mode = "paste"
 preroll = collections.deque(maxlen=int(PREROLL_SEC * RATE / 800))  # 800-frame blocks
 
 
+FAR_MIC = 0  # tts_one_speaker: the voice is on the left speaker, mic 0 is the far one (MSI Claw 8 AI+)
+
+
 def on_audio(data, frames, t, status):
-    block = data[:, 0].copy()
+    block = data.mean(1) if data.shape[1] > 1 else data[:, 0].copy()
+    if barge and data.shape[1] > 1 and wake_listener is not None:
+        wake_listener.feed(data[:, FAR_MIC].copy())  # while the voice talks: the mic away from its speaker
+        if recording:
+            chunks.append(block)
+        else:
+            preroll.append(block)
+        return
     if TRAIN["buf"] is not None:  # name trainer: everything goes to it, nothing to the wake listener
         TRAIN["buf"].append(block)
         return
@@ -181,10 +248,131 @@ def mic_index():
     return None
 
 
+def mic_users():
+    """Apps that hold the microphone now, from Windows' privacy records (LastUsedTimeStop 0 = still in use)."""
+    import winreg
+    found = []
+    root = r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
+    for sub in ("", "\\NonPackaged"):
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, root + sub) as k:
+                for i in range(winreg.QueryInfoKey(k)[0]):
+                    name = winreg.EnumKey(k, i)
+                    try:
+                        with winreg.OpenKey(k, name) as app:
+                            if winreg.QueryValueEx(app, "LastUsedTimeStop")[0] == 0 and \
+                                    winreg.QueryValueEx(app, "LastUsedTimeStart")[0] != 0:
+                                found.append(name.split("#")[-1])
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+    return [n for n in found if n.lower() not in ("mic_capture.exe", "nonpackaged")]
+
+
+def mic_denied():
+    """Windows privacy switch off: mic access for this device (HKLM), for apps, or for desktop apps."""
+    import winreg
+    root = r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
+    for hive, sub in ((winreg.HKEY_LOCAL_MACHINE, ""), (winreg.HKEY_CURRENT_USER, ""),
+                      (winreg.HKEY_CURRENT_USER, "\\NonPackaged")):
+        try:
+            with winreg.OpenKey(hive, root + sub) as k:
+                if winreg.QueryValueEx(k, "Value")[0] == "Deny":
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def mic_failed(e, where="mic"):
+    """A mic that does not open must not kill dictation: log it, show why on the card, the caller gives up."""
+    print(f"{where} unavailable: {e}", flush=True)
+    ov("info", "Доступ к микрофону выключен: Параметры Windows, Конфиденциальность, Микрофон." if mic_denied()
+       else "Микрофон не открылся: проверь, что он подключён и выбран в настройках SaySo (вкладка «Голос»).",
+       "Микрофон", 8000)
+
+
+MIC_EXE = os.path.join(HERE, "mic_capture", "mic_capture.exe")
+MIC_MODE = "normal"  # "speech" while the driver's own processing cleans the mic (mic_capture.exe)
+
+
+class HelperMic:
+    """The mic through mic_capture.exe (WASAPI with an audio category): same callback and blocks as the
+    sounddevice stream, 16 kHz float32. Setting mic_processing: auto (default) / normal."""
+
+    def __init__(self, mode, device):
+        self.p = subprocess.Popen([MIC_EXE, "--mode", mode, "--device", device], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=0x08000000)
+        head = self.p.stdout.readline().decode("utf-8", "replace").strip()
+        if not head or head.startswith("ERR"):
+            self.p.kill()
+            raise RuntimeError(head or "mic_capture.exe gave no answer")
+        rate, ch, self.mode, self.name = (head.split(" ", 3) + ["", ""])[:4]
+        self.rate, self.ch = int(rate), int(ch)
+        self.active = True
+        threading.Thread(target=self._run, daemon=True, name="mic-helper").start()
+
+    def _run(self):
+        frame = self.rate // 100 * self.ch * 4  # 10 ms
+        pending = np.zeros((0, self.ch), np.float32)
+        try:
+            while self.active:
+                b = self.p.stdout.read(frame)
+                if not b:
+                    break
+                a = np.frombuffer(b[:len(b) // (4 * self.ch) * 4 * self.ch], np.float32).reshape(-1, self.ch)
+                if self.rate != RATE:
+                    k = self.rate // RATE
+                    if self.rate % RATE == 0:  # 48 kHz: average of 3, enough for Whisper's band
+                        a = a[:len(a) // k * k].reshape(-1, k, self.ch).mean(1)
+                    else:
+                        idx = np.arange(0, len(a), self.rate / RATE)
+                        a = np.stack([np.interp(idx, np.arange(len(a)), a[:, c]) for c in range(self.ch)], 1)
+                pending = np.concatenate([pending, a.astype(np.float32)])
+                while len(pending) >= 800:  # the blocksize of the sounddevice stream
+                    block, pending = pending[:800], pending[800:]
+                    on_audio(block, 800, None, None)
+        except Exception as e:
+            print(f"mic helper stopped: {e!r}", flush=True)
+        self.active = False
+
+    def stop(self):
+        self.active = False
+        try:
+            self.p.stdin.close()
+            self.p.wait(2)
+        except Exception:
+            self.p.kill()
+
+    def close(self):
+        if self.p.poll() is None:
+            self.p.kill()
+
+
 def open_mic():
-    global stream
-    stream = sd.InputStream(samplerate=RATE, channels=1, dtype="float32", blocksize=800, callback=on_audio,
-                            device=mic_index())
+    global stream, MIC_MODE
+    if (voice_settings.get("mic_processing") or "auto") != "normal" and os.path.exists(MIC_EXE):
+        try:
+            stream = HelperMic("auto", voice_settings.get("mic_device") or "")
+            MIC_MODE = stream.mode
+            print(f"mic: {stream.name}, {stream.mode} mode ({stream.rate} Hz)", flush=True)
+            others = mic_users()
+            if stream.mode == "speech" and others:
+                # a second capture in speech mode broke the driver's processing (music -47 -> -28 dBFS)
+                print(f"other apps hold the mic, the hardware processing may not work: {', '.join(others)}", flush=True)
+            return
+        except Exception as e:
+            print(f"mic helper failed, plain capture: {e}", flush=True)
+    MIC_MODE = "normal"
+    dev = mic_index()
+    stereo = bool(voice_settings.get("tts_one_speaker"))
+    try:
+        stereo = stereo and sd.query_devices(dev if dev is not None else sd.default.device[0])["max_input_channels"] >= 2
+    except Exception:
+        stereo = False
+    stream = sd.InputStream(samplerate=RATE, channels=2 if stereo else 1, dtype="float32", blocksize=800,
+                            callback=on_audio, device=dev)
     stream.start()
 
 
@@ -204,6 +392,8 @@ BEEP_FOLLOW = make_beep("beep_follow.wav", 990, 55, 0.18)  # soft "still listeni
 
 
 def beep(path):
+    if voice_settings.get("beeps") is False:  # Settings -> Голос -> "Звуковой сигнал": the tones can be turned off
+        return
     winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
 
 
@@ -241,10 +431,16 @@ TAIL_JUNK = re.compile(r"\s*(?:(?:Редактор|Корректор|Автор
                        r"\s*(?i:продолжение следует|спасибо за просмотр|подписывайтесь на канал)\W*$")
 
 
-def is_silence_or_noise(text, audio=None):
+def is_silence_or_noise(text, audio=None, wake_gate=False):
     if audio is not None and len(audio) > 0:
         rms = float(np.sqrt(np.mean(audio**2)))
-        if rms < 0.003:
+        # speech mode leaves a faint hiss around -46 dBFS on which Whisper invents words ("Смешно", "Счастье");
+        # the user's speech there is about -27 dBFS
+        if rms < (0.008 if MIC_MODE == "speech" else 0.003):
+            return True
+        # what is left of the assistant's own answer in speech mode is about 0.011 rms, the user ~0.04-0.1:
+        # a stricter gate for the wake listener only (dictation clips carry silence and average lower)
+        if wake_gate and MIC_MODE == "speech" and rms < 0.02:
             return True
     t = text.strip().lower()
     if not t:
@@ -273,8 +469,10 @@ def is_silence_or_noise(text, audio=None):
     return short and bool(re.fullmatch(r'(сч[ае]стье|угу|ага|ну|хм+)\W*', t))
 
 
-def speech_to_text(audio, quiet=False):
-    """Whisper on the NPU. quiet=True (wake listener): background speech is never logged."""
+def speech_to_text(audio, quiet=False, wake_gate=None):
+    """Whisper on the NPU. quiet=True (wake listener): background speech is never logged. wake_gate (default:
+    quiet) adds the stricter level gate meant for short wake segments; a fixed-length test clip is mostly
+    silence and must skip it, or the wizard's mic test and the name trainer hear nothing."""
     if len(audio) < RATE * 0.3:
         return ""
     kw = {"task": "transcribe"}
@@ -287,7 +485,7 @@ def speech_to_text(audio, quiet=False):
     # times). Three or more repeats of one 2-5 letter unit collapse to two ("мурмур").
     text = re.sub(r"(?i)(\w{2,5}?)\1{2,}", r"\1\1", text)
     text = TAIL_JUNK.sub("", text).strip() or text  # junk alone is dropped by is_silence_or_noise
-    if is_silence_or_noise(text, audio):
+    if is_silence_or_noise(text, audio, wake_gate=quiet if wake_gate is None else wake_gate):
         if not quiet:
             print(f"[{time.time() - t:.1f}s] (ignored silence/noise: {text!r})", flush=True)
         return ""
@@ -301,7 +499,7 @@ _ov_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
 def assistant_title():
-    return voice_settings.get("assistant_name") or "Мурмур"
+    return voice_settings.get("assistant_name") or "Сэйсо"
 
 
 def ov(kind, text="", title=None, ms=0):
@@ -360,16 +558,67 @@ def set_listening(on):
     if not on:
         msg = "Слушание выключено. Зови кнопкой."
     elif on_ac():
-        msg = f"Слушаю. Скажи: привет, {assistant_title()}."
+        msg = f"Слушаю. Зови: {assistant_title()}."
     else:
         msg = "Слушание включено, заработает от зарядки."
     print(f"listening {'on' if on else 'off'}", flush=True)
     agent().report(msg, vocal=True)
 
 
+# ---------------- quieter speakers while a button listens. One worker keeps the on/off order; the old level is also
+# in a file, so a crash in between cannot leave the volume low after the next start.
+DUCK_FILE = os.path.join(voice_settings.USER_DIR, "duck_volume.txt")
+_duck_q = queue.Queue()
+_duck_id = 0
+
+
+def duck(sec):
+    """On for at most sec: a phrase that never reaches a command must not leave the speakers quiet."""
+    global _duck_id
+    _duck_id += 1
+    sid = _duck_id
+    _duck_q.put(True)
+    threading.Timer(sec, lambda: sid == _duck_id and unduck()).start()
+
+
+def unduck():
+    global _duck_id
+    _duck_id += 1
+    _duck_q.put(False)
+
+
+def duck_worker():
+    was = None
+    try:
+        with open(DUCK_FILE, encoding="utf-8") as f:
+            state = f.read()
+        os.remove(DUCK_FILE)
+        if not state.strip().isdigit():  # (a lone number is a master volume from an older version: skip it)
+            agent().duck_off(state)
+    except (OSError, ValueError):
+        pass
+    except Exception as e:
+        print(f"duck restore failed: {e!r}", flush=True)
+    while True:
+        want = _duck_q.get()
+        try:
+            if want and was is None:
+                time.sleep(0.2)  # the start beep plays at the normal volume
+                was = agent().duck_on()
+                if was is not None:
+                    with open(DUCK_FILE, "w", encoding="utf-8") as f:
+                        f.write(was)
+            elif not want and was is not None:
+                agent().duck_off(was)
+                was = None
+                os.remove(DUCK_FILE)
+        except Exception as e:
+            print(f"duck failed: {e!r}", flush=True)
+
+
 def command(text):
     """A spoken command (Gemma button or wake phrase). Listening on/off is handled here, the
-    rest goes to the agent."""
+    rest goes to the agent. The speakers stay quieter: the answer and the follow-up window come next."""
     ov("think", f"«{text}»")
     if LISTEN_OFF.search(text):
         set_listening(False)
@@ -405,11 +654,12 @@ def run_trainer_port():
             with lock:
                 if stream is None or not stream.active:
                     open_mic()
+                    time.sleep(0.5)  # a cold mic (and the driver's processing) needs a moment before audio flows
             TRAIN["buf"] = []
             time.sleep(sec)
             audio = np.concatenate(TRAIN["buf"]) if TRAIN["buf"] else np.zeros(0, np.float32)
             TRAIN["buf"] = None
-            text = speech_to_text(audio, quiet=True) if len(audio) else ""
+            text = speech_to_text(audio, quiet=True, wake_gate=False) if len(audio) else ""
             s.sendto(json.dumps({"text": text}, ensure_ascii=False).encode("utf-8"), addr)
         except Exception as e:
             TRAIN["buf"] = None
@@ -419,7 +669,8 @@ def run_trainer_port():
 def wake_active():
     # the VAD runs for the wake phrase (AC + listening on) and, on any power, during a follow-up window
     # (+15 s so a phrase that started inside the window can finish) or while the voice talks (barge-in)
-    return not recording and stream is not None and ((listening and on_ac()) or in_followup(15) or barge)
+    return not recording and stream is not None and _vs.assistant_on() and \
+        ((listening and on_ac()) or in_followup(15) or barge)
 
 
 barge = False           # the TTS voice is talking: "стоп" said over it cuts it
@@ -438,12 +689,18 @@ def on_speaking(on):
         barge = on
     if wake_listener is not None:
         wake_listener.barge = on
+    if on:
+        duck(180)  # quieter speakers under the answer, like a smart speaker
+    else:  # back to the old volume, unless a follow-up window opens now (it restores the volume when it ends)
+        threading.Timer(1.0, lambda: not recording and not in_followup() and unduck()).start()
+    print(f"[barge] {time.strftime('%H:%M:%S')} listening for a stop word: {'on' if on else 'off'}, "
+          f"mic open: {stream is not None and stream.active}", flush=True)
 
 
 def barge_text(text):
     """A rolling transcript of the last ~1.6 s while the voice talks. Mostly it is the voice itself
     (speakers -> mic), so only a stop word that is NOT in the answer being read counts."""
-    m = STOP_WORDS.search(text.lower()) or re.fullmatch(r"\W*(сто)\W*", text.lower())  # Whisper: "Сто."
+    m = STOP_WORDS.search(text.lower()) or re.fullmatch(r"\W*(сто|100|топ)\W*", text.lower())  # Whisper: "Сто.", "100", "Топ." over the voice
     if not m or re.search(rf"\b{m.group(1)}\b",agent().SPOKEN["text"]):
         return False
     print(f"[barge-in] {text}", flush=True)
@@ -461,7 +718,10 @@ def open_followup(sound=None):
         if recording:
             return
         if stream is None or not stream.active:
-            open_mic()  # battery: the mic sleeps between commands, wake it for the window
+            try:
+                open_mic()  # battery: the mic sleeps between commands, wake it for the window
+            except Exception as e:
+                return mic_failed(e)
     sec = voice_settings.get("follow_sec")
     sec = FOLLOW_SEC if sec is None else sec
     try:  # conversation mode: a longer pause to think of the next phrase
@@ -476,6 +736,7 @@ def open_followup(sound=None):
     if wake_listener is not None:
         wake_listener.awaiting_until = followup_until
     beep(sound or BEEP_FOLLOW)
+    duck(sec + 20)  # the follow-up window listens too: quieter speakers until it ends (end_followup)
     ov("mic", ms=int(sec * 1000))
     threading.Timer(sec + 0.3, end_followup).start()
 
@@ -483,6 +744,8 @@ def open_followup(sound=None):
 def end_followup():
     if in_followup() or (wake_listener is not None and wake_listener.speech):
         return  # renewed, or a phrase is still being spoken: its command will open a new window
+    if not recording and not barge:  # (a window that ends while the answer still plays keeps the speakers quiet)
+        unduck()
     ov("mic_off")
 
 
@@ -516,9 +779,13 @@ last_stop_time = 0
 
 def start(m="paste"):
     global recording, chunks, session, mode
+    if m == "agent" and not _vs.assistant_on():  # dictation-only install: the command button has nothing to run
+        ov("info", "Установлена только диктовка. Помощника включают в настройках SaySo", None, 4000)
+        return
     if m == "agent":  # Gemma button is a tap: open the 6 s listening window, no hold needed
         threading.Thread(target=lambda: agent().stop_speaking(), daemon=True).start()
         open_followup(BEEP_START)
+        duck(25)  # the window, a phrase started at its end (up to 15 s) and Whisper
         return
     with lock:
         # Debounce macro jitter here (not in stop): a bounce right after a release must not
@@ -530,8 +797,12 @@ def start(m="paste"):
             chunks = list(preroll)  # warm mic: include the moment just before the press
         else:
             chunks = []
-            open_mic()  # cold mic (battery): 0.1-2 s to wake
+            try:
+                open_mic()  # cold mic (battery): 0.1-2 s to wake
+            except Exception as e:
+                return mic_failed(e)
         beep(BEEP_START)  # after the mic is live, so the beep means "speak now"
+        duck(MAX_SEC + 5)
         threading.Thread(target=lambda: agent().stop_speaking(), daemon=True).start()  # pressing talks over the voice
         ov("listen", "Слушаю…", None if m == "agent" else "Диктовка")
         recording = True
@@ -550,6 +821,7 @@ def stop():
         if not want_warm():
             close_mic()
         audio = np.concatenate(chunks) if chunks else np.zeros(0, np.float32)
+    unduck()
     beep(BEEP_STOP)
     ov("think", "Распознаю…", None if mode == "agent" else "Диктовка")
     threading.Thread(target=transcribe, args=(audio, mode), daemon=True).start()
@@ -570,6 +842,7 @@ def helper_alive(tries=6):
 
 def manage_mic():
     """Warm mic on AC, closed on battery; also reopens it after a device change or sleep."""
+    last_err, err_at = "", 0.0
     while True:
         time.sleep(5)
         try:  # listen_state.txt changed from outside (Desktop bat): apply it
@@ -582,6 +855,8 @@ def manage_mic():
             if recording:
                 continue
             warm, active = want_warm() or in_followup(15) or barge, stream is not None and stream.active
+            if last_err and time.time() - err_at < 60:  # no mic: try again once a minute, not every 5 s
+                continue
             try:
                 if warm and not active:
                     close_mic()
@@ -591,7 +866,11 @@ def manage_mic():
                     close_mic()
                     print("mic closed (battery)", flush=True)
             except Exception as e:
-                print(f"mic switch failed: {e}", flush=True)
+                if str(e) != last_err:
+                    print(f"mic switch failed: {e}", flush=True)
+                last_err, err_at = str(e), time.time()
+                continue
+            last_err = ""
 
 
 def run_helper_events():
@@ -657,7 +936,7 @@ try:
     wake_listener = wake.WakeListener(os.path.join(HERE, "silero_vad.onnx"),
                                       transcribe=lambda a: speech_to_text(a, quiet=True), on_command=command,
                                       active=wake_active,
-                                      beep=lambda: (beep(BEEP_START), ov("listen", "Слушаю…"),
+                                      beep=lambda: (beep(BEEP_START), ov("listen", "Слушаю…"), duck(25),
                                                     threading.Thread(target=lambda: agent().stop_speaking(),
                                                                      daemon=True).start()),
                                       log=lambda m: print(m, flush=True), on_barge=barge_text)
@@ -666,9 +945,13 @@ except Exception as e:
     print(f"wake listener disabled: {e!r}", flush=True)
 start_overlay()
 if want_warm():
-    open_mic()
+    try:
+        open_mic()
+    except Exception as e:
+        mic_failed(e)
 threading.Thread(target=manage_mic, daemon=True).start()
 threading.Thread(target=run_trainer_port, daemon=True).start()
+threading.Thread(target=duck_worker, daemon=True).start()
 threading.Thread(target=lambda: agent().warm(), daemon=True).start()  # first command must not pay startup
 if helper_alive():
     run_helper_events()

@@ -160,4 +160,34 @@ ok = [m["kind"] for m in sent] == ["hide"]
 bad += not ok
 print(("ok  " if ok else "FAIL"), "screenshot hides the card ->", sent)
 g._ov_sock, g.voice_settings.get = real_sock, real_get
+
+# an early-spoken first sentence (web and chat answers): "стоп" is heard at once, and a stop drops the rest
+barge = []
+g.on_speaking = barge.append
+g.voice_settings.get = lambda key: False if key == "tts_one_speaker" else real_get(key)
+calls.clear()
+g.EARLY.clear()
+g.EARLY["text"] = "Первое предложение."
+g.speak_now("Первое предложение.")
+g.time.sleep(0.2)
+ok = barge == [True]
+bad += not ok
+print(("ok  " if ok else "FAIL"), "early voice turns the stop word listening on ->", barge)
+g.stop_speaking()
+calls.clear()
+g.speak("Первое предложение. А это остаток ответа.")
+g.time.sleep(0.2)
+said = [c for c in calls if c[0] == "_ps_out" and "Say" in str(c[1])]
+ok = not said and "text" not in g.EARLY
+bad += not ok
+print(("ok  " if ok else "FAIL"), "stop during generation: the rest is not spoken ->", said)
+g.EARLY.clear()
+calls.clear()
+g.speak("Обычный ответ.")
+g.time.sleep(0.2)
+said = [c for c in calls if c[0] == "_ps_out" and "Say" in str(c[1])]
+ok = len(said) == 1
+bad += not ok
+print(("ok  " if ok else "FAIL"), "a normal answer still speaks ->", len(said))
+g.on_speaking, g.voice_settings.get = None, real_get
 print("FAILED:", bad)

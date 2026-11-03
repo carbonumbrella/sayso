@@ -1,17 +1,18 @@
-# Wake phrase "привет, Гемма ..." for dictate.py (used only on AC power and while listening is on).
+# Wake phrase "<name>, <command>" (an optional greeting before the name) for dictate.py (used only on AC power and while listening is on).
 # Silero VAD (onnxruntime, CPU, ~0.2 ms per 32 ms chunk) gates the audio; each finished speech
 # segment goes to the already loaded Whisper on the NPU, and only text that starts with the wake
 # phrase is acted on. Other speech is transcribed locally, never logged or stored.
-# "привет, Гемма" alone -> beep, the next phrase within 6 s is the command. The same window is opened by
+# The name alone -> beep, the next phrase within 6 s is the command. The same window is opened by
 # dictate.py after every answer (Alice-style follow-up): speech that STARTS inside it is a command.
-import re, time, queue, threading, collections
+import os, re, time, wave, queue, threading, collections
 import numpy as np
 import onnxruntime as ort
 
 import voice_settings
 
 GREETING = r"(?:привет\w*|эй|окей|ok|хей|hey|hi)"
-GEMMA = r"(?:г|дж|дэ)[еэиы]м+[аеуыи]|гам+[аеу]|(?:g|j|dj)[eiy]m+a"  # Whisper: Гима, Гимма, Джемма
+# Whisper: Гима, Гимма, Джемма; over music also Гемба, Генба, Гимба, Гембат, Генбасс, Емма (heard on the Claw 2026-11-03)
+GEMMA = (r"(?:г|дж|дэ)[еэиы][мн]+б?[аеуыи][тс]*|[еэ]мм[аеуыи]|гам+[аеу]|(?:g|j|dj)[eiy]m+a")
 _wake = {"key": None, "re": None}
 
 
@@ -21,7 +22,9 @@ def wake_re():
     names = [voice_settings.get("assistant_name") or ""] + list(voice_settings.get("wake_names") or [])
     key = tuple(n.lower().strip() for n in names if n and n.strip())
     if key != _wake["key"]:
-        alts = [re.escape(n).replace("\\ ", "[\\s-]*").replace("\\-", "[\\s-]*") for n in key]
+        # е, э and ё count as one letter: Whisper writes the same "Сэйса" as "Сейса" from one try to the next
+        alts = [re.escape(n.replace("ё", "е").replace("э", "е")).replace("\\ ", "[\\s-]*").replace("\\-", "[\\s-]*")
+                .replace("е", "[еэё]") for n in key]
         if "гемма" in key:
             alts.append(GEMMA)
         _wake["re"] = re.compile(r"^\W*(?:" + GREETING + r"\W+)?(?:" + "|".join(alts or ["мурмур"]) + r")\b\W*(.*)$",
@@ -91,6 +94,9 @@ class WakeListener:
                     self.seg.append(chunk)
                     self.silence = self.silence + 1 if p < OFF else 0
                     if self.silence >= END_CHUNKS or len(self.seg) >= MAX_CHUNKS:
+                        if voice_settings.get("debug_wake"):
+                            self.log(f"[wake-debug] segment end: {len(self.seg) * CHUNK / RATE:.1f} s, "
+                                     f"{'max length' if len(self.seg) >= MAX_CHUNKS else 'silence'}")
                         if len(self.seg) - self.silence >= MIN_CHUNKS:
                             audio = np.concatenate(self.seg)
                             threading.Thread(target=self._handle, args=(audio, self.follow), daemon=True).start()
@@ -113,14 +119,19 @@ class WakeListener:
         if self._since < BARGE_STEP or self._barge_busy or len(self.recent) < 20:
             return
         self._since = 0
-        if max(q for _, q in self.recent) < ON:
+        peak = max(q for _, q in self.recent)
+        if peak < ON:
+            if voice_settings.get("debug_barge"):
+                self.log(f"[barge-debug] quiet window, vad {peak:.2f}")
             return  # nobody talks (or the voice is too quiet to reach the mic)
         audio = np.concatenate([c for c, _ in self.recent])
         self._barge_busy = True
 
         def run():
             try:
+                started = time.time()
                 text = self.transcribe(audio)
+                self._barge_debug(audio, peak, time.time() - started, text)
                 if text and self.barge and self.on_barge(text):
                     self.barge = False
                     self.recent.clear()
@@ -129,15 +140,48 @@ class WakeListener:
                 self._barge_busy = False
         threading.Thread(target=run, daemon=True).start()
 
+    def _barge_debug(self, audio, peak, took, text):
+        """Setting debug_barge (off by default, this records the mic): what each barge-in window held, to tell echo
+        from a logic fault. Text to the log, the audio to <user dir>\\barge_debug, at most 300 windows per run."""
+        if not voice_settings.get("debug_barge"):
+            return
+        self._debug_n = getattr(self, "_debug_n", 0) + 1
+        rms = float(np.sqrt(np.mean(audio ** 2)))
+        self.log(f"[barge-debug] #{self._debug_n} vad {peak:.2f} rms {rms:.3f} whisper {took:.2f}s text {text!r}")
+        if self._debug_n > 300:
+            return
+        try:
+            folder = os.path.join(voice_settings.USER_DIR, "barge_debug")
+            os.makedirs(folder, exist_ok=True)
+            with wave.open(os.path.join(folder, f"{time.strftime('%Y%m%d-%H%M%S')}-{self._debug_n}.wav"), "wb") as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE)
+                w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
+        except OSError as e:
+            self.log(f"[barge-debug] not saved: {e!r}")
+
     def _handle(self, audio, follow=False):
         text = self.transcribe(audio)
+        if voice_settings.get("debug_wake"):  # off by default: this logs what is said near the mic
+            rms = float(np.sqrt(np.mean(audio ** 2)))
+            self._wake_n = getattr(self, "_wake_n", 0) + 1
+            self.log(f"[wake-debug] {time.strftime('%H:%M:%S')} #{self._wake_n} {len(audio) / RATE:.1f} s, rms {rms:.3f}, "
+                     f"follow {follow}: {text!r}")
+            if voice_settings.get("debug_wake_audio") and self._wake_n <= 200:  # and records it: diagnostics only
+                try:
+                    folder = os.path.join(voice_settings.USER_DIR, "wake_debug")
+                    os.makedirs(folder, exist_ok=True)
+                    with wave.open(os.path.join(folder, f"{time.strftime('%H%M%S')}-{self._wake_n}.wav"), "wb") as w:
+                        w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE)
+                        w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
+                except OSError as e:
+                    self.log(f"[wake-debug] not saved: {e!r}")
         if not text:
             return
-        if follow:  # follow-up: after a bare "привет, Гемма" or after an answer
+        if follow:  # follow-up: after the bare name or after an answer
             self.awaiting_until = 0
             W = wake_re()
             text = W.sub(lambda m: m.group(1), text) if W.match(text) else text  # "Гемма, а завтра?" too
-            if not text.strip(" .,!?"):  # just "привет, Гемма" again: keep waiting for the command
+            if not text.strip(" .,!?"):  # just the name again: keep waiting for the command
                 self.beep()
                 self.awaiting_until = time.time() + FOLLOW_UP_SEC
                 return

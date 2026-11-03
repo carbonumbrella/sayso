@@ -11,7 +11,7 @@
     <RootNamespace>ClawVoice</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>0.3.9</Version>
+    <Version>0.3.10</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 

@@ -35,6 +35,7 @@ namespace ClawVoice
         readonly TranslateTransform _slide = new();
         readonly DispatcherTimer _hide = new();
         bool _shown;
+        string _kind = "";  // kind of the card on screen
 
         public OverlayWindow()
         {
@@ -143,8 +144,10 @@ namespace ClawVoice
                     ShowMessage(new Msg { Kind = "listen", Title = m.Title, Text = "Слушаю…", Ms = m.Ms });
                     return;  // the listen card pulses itself; no badge on a card that only says "Слушаю…"
                 }
-                _micBadge.Visibility = on && _shown ? Visibility.Visible : Visibility.Collapsed;
-                _micBadge.BeginAnimation(OpacityProperty, on && _shown ? Pulse(0.3) : null);
+                // a "listen" card already shows a pulsing mic: a second one next to it looked like two mics
+                bool badge = on && _shown && _kind != "listen";
+                _micBadge.Visibility = badge ? Visibility.Visible : Visibility.Collapsed;
+                _micBadge.BeginAnimation(OpacityProperty, badge ? Pulse(0.3) : null);
                 if (on && m.Ms > 0 && (!_hide.IsEnabled || _hide.Interval.TotalMilliseconds < m.Ms))
                 {
                     _hide.Stop();
@@ -161,6 +164,7 @@ namespace ClawVoice
                 if (_shown) FadeOut();
                 return;
             }
+            _kind = m.Kind;
             var (glyph, key) = m.Kind switch
             {
                 "ok" => ("", "Ok"),

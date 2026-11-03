@@ -23,22 +23,63 @@ def gemma_dir():
         if all(os.path.isfile(os.path.join(d, f)) for f in GEMMA_FILES):
             return d
     return None
+
+
+# Whisper speech models (OpenVINO IRs on Hugging Face), installed and removed in the settings. Setting stt_model:
+# "small" fast and light, "turbo" (large-v3-turbo) accurate; "auto" = turbo on a GPU, small on an NPU or a CPU.
+# Measured on the MSI Claw 8 AI+ (Lunar Lake), 16 s of speech, error rate quiet / over music:
+#   small CPU 2.3 s, GPU 0.8 s, NPU 0.35 s, 7% / 21%;  turbo GPU 0.5 s, NPU 1.6 s (fp16), 0% / 4%;  turbo CPU 9.5 s.
+# The Lunar Lake NPU loses the device on every int8 build of turbo, so the NPU gets its own fp16 build
+# (first compile ~6 min, then cached).
+WHISPER = {
+    "small": {"repo": "OpenVINO/whisper-small-int8-ov", "mb": 244, "devices": ("NPU", "GPU", "CPU")},
+    "turbo": {"repo": "OpenVINO/whisper-large-v3-turbo-int8-ov", "mb": 789, "devices": ("GPU", "CPU")},
+    "turbo-npu": {"repo": "OpenVINO/whisper-large-v3-turbo-fp16-ov", "mb": 1552, "devices": ("NPU",)},
+}
+WHISPER_FILES = [f"openvino_{p}_model.{e}" for p in ("encoder", "decoder") for e in ("xml", "bin")] + \
+                [f"openvino_{p}.{e}" for p in ("tokenizer", "detokenizer") for e in ("xml", "bin")]
+
+
+def whisper_dir(key):
+    return os.path.join(HERE, WHISPER[key]["repo"].split("/")[1])
+
+
+def whisper_complete(key):
+    """All files there: an interrupted download leaves the folder half full."""
+    return all(os.path.isfile(os.path.join(whisper_dir(key), f)) for f in WHISPER_FILES)
+
+
+def whisper_key(size, device):
+    """Catalog entry for a size ("small" / "turbo" / "auto") on a device."""
+    if size not in ("small", "turbo"):
+        size = "turbo" if device == "GPU" else "small"
+    return "turbo-npu" if size == "turbo" and device == "NPU" else size
+
+
+def assistant_on():
+    """Setting assistant: False after a dictation-only install, until the user turns the assistant on."""
+    return get("assistant") is not False
+
+
 DEFAULTS = {
     "follow_sec": 6, "warm_mic": True, "tts_rate": 0, "tts_volume": 100, "tts_voice": "",
-    "hotkey_dictation": "Ctrl+Alt+Win+W",   # rear M1 is mapped to it in ClawTweaks on the Claw
-    "hotkey_gemma": "Ctrl+Win+Shift+G",
+    "hotkey_dictation": "Win+Ctrl+Alt+W",   # rear M1 is mapped to it in ClawTweaks on the Claw (any order parses)
+    "hotkey_gemma": "Win+Ctrl+Shift+G",
     "language": "ru",                        # commands, replies, recognition ("auto" = Whisper decides)
-    "assistant_name": "Мурмур",              # the wake word and how the assistant calls itself
-    "wake_names": ["мурмур", "мур-мур", "мур мур", "мурмура", "murmur", "мормор"],  # Whisper spellings
-    "llm": {"provider": "none", "url": "http://127.0.0.1:8081", "model": ""},  # none | npu | server | cloud
+    "assistant_name": "Сэйсо",               # the wake word and how the assistant calls itself
+    # Whisper spellings heard over music on the Claw (е/э/ё are equal in wake.py)
+    "wake_names": ["сэйсо", "сэйс", "сэйса", "сэйзо", "сэй со", "сэйсуа", "ces"],
+    "llm": {"provider": "none", "url": "http://127.0.0.1:8081", "model": ""},  # none | npu (= local) | server | cloud
+    "llm_device": "auto",                    # the local Gemma: auto (NPU > Intel GPU > CPU) | NPU | GPU | CPU
     "offline": False,                        # no web search, weather, Wikipedia, cloud model
     "mic_device": "",                        # input device name ("" = system default)
     "stt_device": "auto",                    # auto | NPU | GPU | CPU
+    "stt_model": "auto",                     # auto | small | turbo (see WHISPER)
+    "assistant": True,                       # False = dictation only (installer's minimal setup)
     "plugins_disabled": [],
     "screenshot_clipboard": True,            # every screenshot is also copied to the clipboard
 }
 _cache, _mtime = dict(DEFAULTS), None
-
 
 def _migrate():
     if not os.path.exists(FILE) and os.path.exists(LEGACY):

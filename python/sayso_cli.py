@@ -3,21 +3,16 @@
 #   mics                     input devices        hw            hardware + recommended speech device
 #   tg-link <token>          save token, read chat id (after /start)   tg-test   send a test message
 #   secret <name>            value from stdin -> DPAPI secrets          location <city>
-#   models                   speech models present                     download <NPU|GPU|CPU> [size]
+#   models                   models: installed, size, in use            download [key|auto]   remove <key>
 #   gemma-download           Hugging Face token from stdin -> NPU server packages + Gemma model
 #   match <phrase>           which user command a phrase hits (command editor test)
 #   name-test <phrase>       does the wake regex accept it (name trainer)
-import json, os, sys
+import json, os, sys, time
 
 sys.stdout.reconfigure(encoding="utf-8")
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import voice_settings
-
-# OpenVINO IRs of Whisper on Hugging Face (int8: fits the NPU; small = what the Claw uses)
-WHISPER = {"small": "OpenVINO/whisper-small-int8-ov", "medium": "OpenVINO/whisper-medium-int8-ov",
-           "large-v3-turbo": "OpenVINO/whisper-large-v3-turbo-int8-ov", "base": "OpenVINO/whisper-base-int8-ov"}
-
 
 def out(obj):
     print(json.dumps(obj, ensure_ascii=False))
@@ -58,20 +53,61 @@ def hw():
     return info
 
 
-# A model counts as present only with all of these: an interrupted download leaves the folder half full
-# (a clean PC got everything but the encoder, and "folder exists" skipped it on the retry).
-MODEL_FILES = [f"openvino_{p}_model.{e}" for p in ("encoder", "decoder") for e in ("xml", "bin")] + \
-              [f"openvino_{p}.{e}" for p in ("tokenizer", "detokenizer") for e in ("xml", "bin")]
+STATE_FILE = os.path.join(HERE, "stt_state.json")  # dictate.py: the Whisper folder it has loaded, one being prepared
 
 
-def complete(dest):
-    return all(os.path.isfile(os.path.join(dest, f)) for f in MODEL_FILES)
+def stt_state():
+    try:
+        with open(STATE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def active_model():
+    return stt_state().get("model", "")
 
 
 def models():
-    m = {k: complete(os.path.join(HERE, repo.split("/")[1])) for k, repo in WHISPER.items()}
-    m["gemma"] = voice_settings.gemma_dir() is not None
-    return m
+    """Every optional model: installed or not, size, in use. Whisper keys as in voice_settings.WHISPER, plus gemma.
+    The bool per key stays for older callers."""
+    act = active_model()
+    info = {}
+    for key, w in voice_settings.WHISPER.items():
+        d = voice_settings.whisper_dir(key)
+        info[key] = {"installed": voice_settings.whisper_complete(key), "mb": w["mb"], "devices": list(w["devices"]),
+                     "active": os.path.basename(d) == act, "dir": os.path.basename(d)}
+    g = voice_settings.gemma_dir()
+    info["gemma"] = {"installed": g is not None, "mb": 3300, "devices": ["NPU"], "dir": os.path.basename(g or ""),
+                     "active": g is not None and voice_settings.get("llm").get("provider") == "npu"}
+    out = {k: v["installed"] for k, v in info.items()}
+    out["info"] = info
+    out["state"] = stt_state()
+    return out
+
+
+def remove(key):
+    """Delete a model folder (and its compiled NPU cache). The one dictation has loaded stays."""
+    import shutil
+    if key == "gemma":
+        d = voice_settings.gemma_dir()
+        if not d:
+            return {"ok": True}
+        if voice_settings.get("llm").get("provider") == "npu":
+            raise RuntimeError("Gemma выбрана на вкладке «Модель»: сначала выбери там другой вариант")
+        shutil.rmtree(d)
+        return {"ok": True}
+    if key not in voice_settings.WHISPER:
+        raise RuntimeError(f"unknown model {key!r}")
+    d = voice_settings.whisper_dir(key)
+    if os.path.basename(d) == active_model():
+        raise RuntimeError("эта модель сейчас распознаёт речь: сначала выбери другую")
+    if os.path.isdir(d):
+        shutil.rmtree(d)
+    cache = os.path.join(HERE, "npu_cache", os.path.basename(d))
+    if os.path.isdir(cache):
+        shutil.rmtree(cache, ignore_errors=True)
+    return {"ok": True}
 
 
 def gemma_download(token):
@@ -86,15 +122,13 @@ def gemma_download(token):
                            capture_output=True, text=True)
         if r.returncode:
             raise RuntimeError("не установились пакеты сервера: " + (r.stderr or r.stdout).strip()[-300:])
-    from huggingface_hub import snapshot_download
-    from huggingface_hub.errors import GatedRepoError, HfHubHTTPError
     dest = os.path.join(HERE, voice_settings.GEMMA_REPO.split("/")[1])
     try:
-        snapshot_download(voice_settings.GEMMA_REPO, local_dir=dest, token=token)  # resumes a partial download
-    except GatedRepoError:  # (also what a wrong token gets: the gated files answer 401 as "no access")
-        raise RuntimeError("нет доступа: проверь токен и прими лицензию Gemma на странице модели тем же аккаунтом")
-    except HfHubHTTPError as e:
-        if getattr(e.response, "status_code", 0) == 401:
+        snapshot_watched(voice_settings.GEMMA_REPO, dest, "gemma", 3300, token=token)  # resumes a partial download
+    except FetchError as e:
+        if e.kind == "GatedRepoError":  # (also what a wrong token gets: the gated files answer 401 as "no access")
+            raise RuntimeError("нет доступа: проверь токен и прими лицензию Gemma на странице модели тем же аккаунтом")
+        if e.status == 401:
             raise RuntimeError("токен не подошёл")
         raise
     if not voice_settings.gemma_dir():
@@ -102,17 +136,143 @@ def gemma_download(token):
     return {"model": dest}
 
 
-def download(device, size=None):
-    # the NPU and small machines get "small" (larger ones crash the Claw's NPU with DEVICE_LOST)
-    size = size or ("small" if device in ("NPU", "CPU") else "large-v3-turbo")
-    repo = WHISPER[size]
-    dest = os.path.join(HERE, repo.split("/")[1])
-    if not complete(dest):
-        from huggingface_hub import snapshot_download
-        snapshot_download(repo, local_dir=dest)  # resumes: files already there are kept
-        if not complete(dest):
+def download(key="auto"):
+    """A Whisper model by catalog key; "auto" (the installer) = the one setting stt_model wants on this PC's device."""
+    if key not in voice_settings.WHISPER:
+        key = voice_settings.whisper_key(voice_settings.get("stt_model"), hw()["recommend"])
+    if key == "turbo-npu" and not voice_settings.whisper_complete("small"):
+        download("small")  # small dictates while turbo is compiled for the NPU (~6 min the first time)
+    dest = voice_settings.whisper_dir(key)
+    if not voice_settings.whisper_complete(key):
+        snapshot_watched(voice_settings.WHISPER[key]["repo"], dest, key, voice_settings.WHISPER[key]["mb"])
+        if not voice_settings.whisper_complete(key):
             raise RuntimeError("the model download is incomplete")
-    return {"model": dest, "size": size}
+    return {"model": dest, "key": key}
+
+
+def _dir_bytes(d):
+    total = 0
+    for root, _, files in os.walk(d):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total
+
+
+PROGRESS_FILE = os.path.join(HERE, "download_progress.json")  # read by the installer and Settings while a model downloads
+
+
+MIRROR = "https://hf-mirror.com"  # public Hugging Face mirror: used only when huggingface.co itself crawls
+SLOW = ("модель качается слишком медленно: huggingface.co и его зеркало почти не отдают файлы. Возможно, для "
+        "скачивания потребуется VPN. Запусти загрузку ещё раз, скачанное сохранится")
+
+
+def snapshot_watched(repo, dest, key="", total_mb=0, token=None, window=90, min_rate=30_000):
+    """snapshot_download (it resumes: files already there are kept) that does not hang. Without a VPN the Hugging Face
+    CDN can be throttled to ~1 KB/s (Russia, 2026-11): the download then moves to hf-mirror.com (5.5 MB/s there) and
+    every file it brought is checked against the hashes huggingface.co publishes. A token (gated Gemma) never goes to
+    the mirror. Each try runs in its own process so a crawling one can be killed. Progress: download_progress.json."""
+    sources = ["https://huggingface.co"] + ([] if token else [MIRROR])
+    try:
+        for i, endpoint in enumerate(sources):
+            res = _fetch_watched(repo, dest, endpoint, token, key, total_mb, window, min_rate)
+            if res is None:
+                if endpoint != sources[0]:
+                    _verify(repo, dest)
+                return
+            if res != "slow":
+                if endpoint == MIRROR:  # the mirror answers only some regions (it redirects others back to huggingface.co)
+                    raise RuntimeError(SLOW)
+                raise res
+            if i + 1 == len(sources):
+                raise RuntimeError(SLOW)
+            print(f"{endpoint} crawls, switching to {sources[i + 1]}", file=sys.stderr, flush=True)
+    finally:
+        try:
+            os.remove(PROGRESS_FILE)
+        except OSError:
+            pass
+
+
+class FetchError(RuntimeError):
+    def __init__(self, msg, kind="", status=0):
+        super().__init__(msg)
+        self.kind, self.status = kind, status
+
+
+def _fetch_watched(repo, dest, endpoint, token, key, total_mb, window, min_rate):
+    """One snapshot_download in a child process: None when done, "slow" when it crawled (killed), else the error."""
+    import subprocess
+    p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "_fetch", repo, dest, endpoint],
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                         creationflags=0x08000000)
+    p.stdin.write((token or "").encode())
+    p.stdin.close()
+    mark, at = _dir_bytes(dest), time.time()
+    while p.poll() is None:
+        time.sleep(1)
+        now = _dir_bytes(dest)
+        _progress(key, now // (1 << 20), total_mb)
+        if time.time() - at >= window:
+            if now - mark < min_rate * window:
+                p.kill()
+                p.wait()
+                return "slow"
+            mark, at = now, time.time()
+    try:
+        res = json.loads(p.stdout.read().decode("utf-8").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return FetchError(f"загрузка оборвалась (код {p.returncode})")
+    return None if res.get("ok") else FetchError(res.get("error", ""), res.get("kind", ""), res.get("status", 0))
+
+
+def _fetch_child(repo, dest, endpoint):
+    # plain HTTP: files grow in place (.cache\...\*.incomplete), so the progress and the crawl check can see them;
+    # hf_xet assembles them in its own cache out of sight
+    os.environ["HF_HUB_DISABLE_XET"] = "1"
+    from huggingface_hub import snapshot_download
+    token = sys.stdin.read().strip() or None
+    try:
+        snapshot_download(repo, local_dir=dest, token=token, endpoint=endpoint)
+        out({"ok": True})
+    except Exception as e:
+        out({"error": str(e), "kind": type(e).__name__,
+             "status": getattr(getattr(e, "response", None), "status_code", 0) or 0})
+
+
+def _verify(repo, dest):
+    """Files from the mirror against huggingface.co's own hashes (sha256 for large files, the git blob id for small
+    ones). A file that differs is deleted and the download fails: the mirror is not trusted with the content."""
+    import hashlib
+    from huggingface_hub import HfApi
+    info = HfApi(endpoint="https://huggingface.co").model_info(repo, files_metadata=True)
+    for f in info.siblings:
+        path = os.path.join(dest, f.rfilename)
+        if not os.path.isfile(path):
+            continue
+        if f.lfs:
+            h, want = hashlib.sha256(), f.lfs.sha256
+        else:
+            h, want = hashlib.sha1(), f.blob_id
+            h.update(f"blob {os.path.getsize(path)}\0".encode())
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        if want and h.hexdigest() != want:
+            os.remove(path)
+            raise RuntimeError(f"файл {f.rfilename} с зеркала не совпал с оригиналом и удалён. Возможно, для "
+                               "скачивания потребуется VPN")
+
+
+def _progress(key, mb, total_mb):
+    try:
+        with open(PROGRESS_FILE + ".tmp", "w", encoding="ascii") as f:
+            json.dump({"key": key, "mb": int(mb), "total": int(total_mb)}, f)
+        os.replace(PROGRESS_FILE + ".tmp", PROGRESS_FILE)
+    except OSError:
+        pass
 
 
 def main(argv):
@@ -126,8 +286,17 @@ def main(argv):
             return out(models())
         if cmd == "gemma-download":  # token on stdin, never on the command line
             return out(gemma_download(sys.stdin.read().strip()))
+        if cmd == "_fetch":  # internal: one download try, see snapshot_watched
+            return _fetch_child(*args[:3])
         if cmd == "download":
-            return out(download(args[0] if args else hw()["recommend"], args[1] if len(args) > 1 else None))
+            return out(download(args[0] if args else "auto"))
+        if cmd == "setup":  # setup <full|minimal> <auto|small|turbo>: the installer's choices
+            voice_settings.put("assistant", args[0] != "minimal")
+            if len(args) > 1 and args[1] in ("small", "turbo"):  # auto keeps the user's earlier choice
+                voice_settings.put("stt_model", args[1])
+            return out({"ok": True})
+        if cmd == "remove":
+            return out(remove(args[0]))
         if cmd == "tg-link":
             import tg
             token = args[0].strip()
@@ -172,3 +341,5 @@ def main(argv):
 
 if __name__ == "__main__":
     main(sys.argv[1:])
+    sys.stdout.flush()
+    os._exit(0)  # a download given up on still has its threads (hf_xet): do not wait for them

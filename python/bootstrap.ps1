@@ -3,12 +3,18 @@
 #   -AppDir      install folder (holds the *.py files)
 #   -WithNpu     also the packages of the optional Gemma NPU server
 #   -SkipModel   do not download the Whisper model (tests)
+#   -Minimal     dictation only: the assistant stays off until it is turned on in the settings
+#   -Model       Whisper size: auto (by the hardware), small or turbo
 # Log: <AppDir>\bootstrap.log. Exit code 0 = ready.
-param([Parameter(Mandatory = $true)][string]$AppDir, [switch]$WithNpu, [switch]$SkipModel)
+param([Parameter(Mandatory = $true)][string]$AppDir, [switch]$WithNpu, [switch]$SkipModel, [switch]$Minimal,
+      [ValidateSet('auto', 'small', 'turbo')][string]$Model = 'auto')
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $log = Join-Path $AppDir 'bootstrap.log'
-function Step($msg) { "$(Get-Date -Format s) $msg" | Add-Content $log -Encoding utf8 }
+function Step($msg) {
+    "$(Get-Date -Format s) $msg" | Add-Content $log -Encoding utf8
+    Set-Content (Join-Path $AppDir 'setup_step.txt') $msg -Encoding ascii  # the installer shows it as its status line
+}
 # Native tools (uv, python) write progress to stderr; in Windows PowerShell 5.1 with 'Stop' that would abort
 # the script. Run them with 'Continue', log everything, and judge only by the exit code.
 function Run([string]$exe, [string[]]$argv) {
@@ -75,7 +81,9 @@ try {
     }
     if ((Run $py @('-c', 'import openvino_genai, sounddevice, onnxruntime, numpy')) -ne 0) { throw 'packages do not import' }
 
-    # 4. the Whisper model for the recommended device (NPU > Intel GPU > CPU)
+    # 4. the setup type and model into the settings, then that Whisper model for the recommended device
+    $setup = if ($Minimal) { 'minimal' } else { 'full' }
+    if ((Run $py @((Join-Path $AppDir 'sayso_cli.py'), 'setup', $setup, $Model)) -ne 0) { throw 'settings were not written' }
     if (-not $SkipModel) {
         # Hugging Face sometimes drops a file mid-download ("The read operation timed out"): retry, the
         # files already fetched are kept, so each attempt only gets the rest

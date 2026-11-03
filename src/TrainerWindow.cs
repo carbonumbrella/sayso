@@ -15,9 +15,11 @@ using System.Windows.Media;
 
 namespace ClawVoice
 {
-    /// <summary>"Тренировать имя": no model training, only Whisper transcripts. Positive rounds ("Скажи: Мурмур")
-    /// collect how Whisper spells the name for this voice; negative rounds (ordinary phrases, look-alike words)
-    /// drop spellings that also appear in normal speech. The result is settings "wake_names".
+    /// <summary>"Тренировать имя": no model training, only Whisper transcripts. Name rounds ("Скажи: Мурмур") collect
+    /// how Whisper spells the name for this voice. A spelling that is also an ordinary word would wake the assistant
+    /// on normal talk: those are dropped by a built-in list of common words and Whisper's noise words, plus two
+    /// look-alike phrases the user reads (reading ordinary sentences caught almost nothing). The result is settings
+    /// "wake_names"; another run for the same name adds to it, so it can be trained in quiet and over music.
     /// Recording happens in dictate.py (UDP 47323), which mutes the wake listener meanwhile.</summary>
     public sealed class TrainerWindow : Window
     {
@@ -68,19 +70,21 @@ namespace ClawVoice
 
             string name = Name();
             _title.Text = $"Тренировка имени «{name}»";
-            _prompt.Text = "Около двух минут";
+            _prompt.Text = "Около минуты";
             _hint.Text = $"Я буду показывать фразы. После сигнала читай их вслух обычным голосом, у каждой есть 3 секунды. " +
-                         $"Сначала имя, потом обычные фразы: так я узнаю, как распознаётся «{name}», и не спутаю его с другими словами. " +
-                         "Диктовка должна быть включена.";
+                         $"Почти все фразы с именем: так я узнаю, как распознаётся «{name}». Если помощника часто зовёшь " +
+                         "под музыку или в игре, включи их: варианты из разных прогонов складываются. Диктовка должна быть включена.";
         }
 
-        static string Name() => (string?)SettingsWindow.Read()["assistant_name"] ?? "Мурмур";
+        static string Name() => (string?)SettingsWindow.Read()["assistant_name"] ?? "Сэйсо";
 
-        static readonly string[] Ordinary =
+        // A name spelling equal to one of these would fire on ordinary talk or on Whisper's noise words
+        static readonly HashSet<string> Common = new(StringComparer.Ordinal)
         {
-            "Сегодня хорошая погода, пойдём гулять", "Позвони маме вечером", "Мне нравится эта музыка",
-            "Надо купить хлеб и молоко", "Кот мурлычет на диване", "Ну что, мур-мур, проголодался",
-            "Посмотрим фильм после ужина", "Завтра рано вставать на работу",
+            "сейчас", "спасибо", "пожалуйста", "смешно", "смешка", "счастье", "давай", "давайте", "сделай", "сколько",
+            "скажи", "слушай", "смотри", "стоп", "хорошо", "привет", "пока", "ладно", "так", "там", "тут", "это",
+            "что", "как", "где", "все", "всё", "вот", "ну", "да", "нет", "мама", "мне", "меня", "может", "можно",
+            "сегодня", "завтра", "потом", "тоже", "очень", "продолжение", "субтитры", "музыка", "спокойной", "господи",
         };
 
         async Task Run()
@@ -88,13 +92,13 @@ namespace ClawVoice
             if (_running) return;
             _running = true;
             _start.IsEnabled = false; _save.IsEnabled = false;
-            _pos.Clear(); _neg.Clear();
+            _pos.Clear(); _neg.Clear(); _bare.Clear();
             string n = Name();
-            var positives = new[] { n, $"{n}, открой блокнот", n, $"Привет, {n}", n, $"{n}, громкость сорок", n,
-                                    $"{n}, сколько времени", n, $"{n}, стоп" };
-            // a look-alike word for the user's own name: its first syllable doubled ("Сей-сей" for "Сейсо")
-            string half = n.Length > 3 ? n[..(n.Length / 2)] : n;
-            var negatives = Ordinary.Concat(new[] { $"Ну что, {half}-{half.ToLowerInvariant()}" }).ToArray();
+            var positives = new[] { n, $"{n}, сколько времени", n, $"Привет, {n}", n, $"{n}, громкость сорок", n,
+                                    $"{n}, открой блокнот", n, $"{n}, стоп", n, $"{n}, какая погода" };
+            // look-alikes read aloud: the name's first syllable doubled ("Сэй-сэй" for "Сэйсо") and a sentence that
+            // starts with the most common word Whisper confuses names with
+            var negatives = new[] { $"Ну что, {FirstSyllable(n)}-{FirstSyllable(n).ToLowerInvariant()}", "Сейчас пойдём гулять" };
             int total = positives.Length + negatives.Length, step = 0;
             foreach (var (phrase, positive) in positives.Select(p => (p, true)).Concat(negatives.Select(p => (p, false))))
             {
@@ -123,10 +127,19 @@ namespace ClawVoice
                     return;
                 }
                 (positive ? _pos : _neg).Add(heard);
+                if (positive) _bare.Add(phrase == n);
                 _heard.Text = $"Услышала: «{heard}»";
             }
             _running = false;
             Summary();
+        }
+
+        /// <summary>Up to the first vowel, with a following й: "Сэй" for "Сэйсо", "Ге" for "Гемма", "Му" for "Мурмур".</summary>
+        static string FirstSyllable(string n)
+        {
+            int v = n.IndexOfAny("аеёиоуыэюяaeiouy".ToCharArray().Concat("АЕЁИОУЫЭЮЯAEIOUY".ToCharArray()).ToArray());
+            if (v < 0 || v + 1 >= n.Length) return n;
+            return n[..(v + 1)] + (char.ToLowerInvariant(n[v + 1]) == 'й' ? n[v + 1].ToString() : "");
         }
 
         static void Beep()
@@ -151,25 +164,50 @@ namespace ClawVoice
 
         static string Norm(string s) => Regex.Replace(s.ToLowerInvariant().Replace('ё', 'е'), @"[^\p{L}\p{Nd}\s-]", " ").Trim();
 
-        /// <summary>The name as Whisper wrote it: the first word(s) of a positive phrase, without a greeting.</summary>
-        static string? Spelling(string heard, int nameWords)
+        /// <summary>1 = the same, 0 = nothing in common: 1 - edit distance / longer length, е and э as one letter,
+        /// spaces and hyphens ignored ("си сэр" is compared as "сисер").</summary>
+        static double Similarity(string a, string b)
         {
-            var words = Norm(heard).Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
-            if (words.Count > 0 && Regex.IsMatch(words[0], "^(привет|эй|окей|ok|hey|hi)")) words.RemoveAt(0);
-            if (words.Count == 0) return null;
-            return string.Join(" ", words.Take(Math.Min(nameWords, words.Count)));
+            static string K(string s) => Regex.Replace(s.Replace('э', 'е'), @"[\s-]", "");
+            a = K(a); b = K(b);
+            if (a.Length == 0 || b.Length == 0) return 0;
+            var d = new int[a.Length + 1, b.Length + 1];
+            for (int i = 0; i <= a.Length; i++) d[i, 0] = i;
+            for (int j = 0; j <= b.Length; j++) d[0, j] = j;
+            for (int i = 1; i <= a.Length; i++)
+                for (int j = 1; j <= b.Length; j++)
+                    d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+            return 1.0 - (double)d[a.Length, b.Length] / Math.Max(a.Length, b.Length);
         }
 
+        /// <summary>The name as Whisper wrote it, without a greeting. A bare-name round is the name as a whole, also when
+        /// Whisper split it ("Сей со"); in a phrase it is the part before the first comma or stop, if that part is short,
+        /// else the first word(s).</summary>
+        static string? Spelling(string heard, int nameWords, bool bare)
+        {
+            string head = bare ? heard : Regex.Split(heard, @"[,.!?;:]")[0];
+            var words = Norm(head).Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (words.Count > 0 && Regex.IsMatch(words[0], "^(привет|эй|окей|ok|hey|hi)")) words.RemoveAt(0);
+            if (words.Count == 0) return null;
+            int take = words.Count <= nameWords + 1 ? words.Count : nameWords;
+            return string.Join(" ", words.Take(take));
+        }
+
+        readonly List<bool> _bare = new();
         List<string> _variants = new();
 
         void Summary()
         {
             string n = Name();
             int nameWords = Norm(n).Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-            var counts = _pos.Select(h => Spelling(h, nameWords)).Where(x => x != null).GroupBy(x => x!)
-                             .ToDictionary(g => g.Key, g => g.Count());
-            // a spelling that also starts an ordinary phrase would wake the assistant by mistake
-            var bad = counts.Keys.Where(v => _neg.Any(h => Norm(h).StartsWith(v + " ") || Norm(h) == v)).ToHashSet();
+            var counts = _pos.Select((h, i) => Spelling(h, nameWords, i < _bare.Count && _bare[i])).Where(x => x != null)
+                             .GroupBy(x => x!).ToDictionary(g => g.Key, g => g.Count());
+            // a spelling that is a common word, or that starts a look-alike phrase, would wake the assistant by mistake
+            var bad = counts.Keys.Where(v => v != Norm(n) && (Common.Contains(v) || v.Split(' ').All(Common.Contains)
+                                             || _neg.Any(h => Norm(h).StartsWith(v + " ") || Norm(h) == v))).ToHashSet();
+            // and a spelling that has little to do with the name ("три", "пейте" for "Сэйсо", misheard over music)
+            // would wake it on random words
+            foreach (var v in counts.Keys.Where(v => Similarity(v, Norm(n)) < 0.65)) bad.Add(v);
             _variants = counts.Where(kv => !bad.Contains(kv.Key) && kv.Key.Length >= 3).OrderByDescending(kv => kv.Value)
                               .Select(kv => kv.Key).ToList();
             int recognized = _pos.Count(h => _variants.Any(v => Norm(h).StartsWith(v)) || Norm(h).StartsWith(Norm(n)));
@@ -189,6 +227,8 @@ namespace ClawVoice
             var list = new List<string> { n };
             list.AddRange(_variants.Where(v => v != n));
             var old = (SettingsWindow.Read()["wake_names"] as JsonArray)?.Select(x => (string)x!).ToList() ?? new List<string>();
+            // the list starts with the name it was trained for: a run for the same name adds to it (quiet, then music)
+            if (old.Count > 0 && old[0] == n) list.AddRange(old.Where(o => !list.Contains(o)));
             list.AddRange(old.Where(o => !list.Contains(o) && o == "гемма"));  // this PC's old name keeps working
             SettingsWindow.Set("wake_names", new JsonArray(list.Distinct().Select(x => (JsonNode)x!).ToArray()));
             _hint.Text = "Сохранено. Новое распознавание имени работает сразу.";

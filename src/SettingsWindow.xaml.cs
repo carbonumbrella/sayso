@@ -36,9 +36,20 @@ namespace ClawVoice
             GemmaSwitch.Click += (_, _) => { bool on = GemmaSwitch.IsChecked == true; Task.Run(() => AppRef.SetGemma(on)); };
             ListenSwitch.Click += (_, _) => Stack.Listening = ListenSwitch.IsChecked == true;
             WarmSwitch.Click += (_, _) => Set("warm_mic", WarmSwitch.IsChecked == true);
+            BeepSwitch.Click += (_, _) => Set("beeps", BeepSwitch.IsChecked == true);
             AutostartSwitch.Click += (_, _) => Autostart.Apply(AutostartSwitch.IsChecked == true);
+            // turns the assistant on right here (commands without a model work); the model stays optional, one click away
+            EnableAssistantBtn.Click += (_, _) =>
+            {
+                Set("assistant", true);
+                Gate();
+                Reload();
+                AssistantOnNote.Visibility = Visibility.Visible;
+            };
+            ToModelLink.Click += (_, _) => TabModel.IsChecked = true;
             CommandsBtn.Click += (_, _) => AppRef.ShowCommands();
             AmbiBtn.Click += (_, _) => App.OpenAmbilight();
+            AmbiBtn.Visibility = App.AmbilightInstalled ? Visibility.Visible : Visibility.Collapsed;
             LogBtn.Click += (_, _) => Stack.Open(Stack.DictateLog);
             HotkeyDictation.Click += (_, _) => Capture(HotkeyDictation);
             HotkeyGemma.Click += (_, _) => Capture(HotkeyGemma);
@@ -60,6 +71,8 @@ namespace ClawVoice
                 Set("mic_device", MicBox.SelectedIndex == 0 ? "" : (string)MicBox.SelectedItem);
                 AppRef.RestartDictationSoon();
             };
+            foreach (var (rb, proc) in new[] { (MicProcHw, "auto"), (MicProcOff, "normal") })
+                rb.Click += (_, _) => { Set("mic_processing", proc); AppRef.RestartDictationSoon(); };
             FollowSlider.ValueChanged += (_, _) => { Labels(); if (!_loading) Set("follow_sec", (int)FollowSlider.Value); };
             RateSlider.ValueChanged += (_, _) => { Labels(); if (!_loading) Set("tts_rate", (int)RateSlider.Value); };
             VolumeSlider.ValueChanged += (_, _) => { Labels(); if (!_loading) Set("tts_volume", (int)VolumeSlider.Value); };
@@ -72,7 +85,11 @@ namespace ClawVoice
                 (int)RateSlider.Value, (int)VolumeSlider.Value, AssistantName() + ": так звучит мой голос.");
 
             // model
-            foreach (var rb in new[] { ProvNone, ProvNpu, ProvServer, ProvCloud }) rb.Click += (_, _) => ModelFields();
+            // another variant: the last check's "Ответила за 1.0 с" belonged to the old one
+            foreach (var rb in new[] { ProvNone, ProvNpu, ProvServer, ProvCloud }) rb.Click += (_, _) => { ModelStatus.Text = ""; ModelFields(); };
+            // "Скачать Gemma" needs the token first: grey until one is pasted
+            HfTokenBox.PasswordChanged += (_, _) => GemmaGetBtn.IsEnabled = HfTokenBox.Password.Trim().Length > 0;
+            GemmaGetBtn.IsEnabled = false;
             ModelSaveBtn.Click += (_, _) => SaveModel();
             ModelTestBtn.Click += async (_, _) => await TestModel();
             GeminiKeyBtn.Click += (_, _) => Stack.Open("https://aistudio.google.com/apikey");
@@ -87,9 +104,11 @@ namespace ClawVoice
             TgLinkBtn.Click += async (_, _) => await TgLink();
             TgTestBtn.Click += async (_, _) =>
             {
+                if (Read()["telegram_chat_id"] is null) { Toast("Сначала привяжи бота: напиши ему /start и нажми «Привязать»", false); return; }
                 TgStatus.Text = "Отправляю…";
                 var r = await Task.Run(() => Stack.Cli("tg-test"));
                 TgStatus.Text = r["error"] is { } err ? "Не получилось: " + err : "Отправила, проверь Телеграм";
+                Toast(TgStatus.Text, r["error"] is null);
             };
 
             // commands
@@ -112,7 +131,11 @@ namespace ClawVoice
 
             // system
             foreach (var (rb, dev) in new[] { (DevAuto, "auto"), (DevNpu, "NPU"), (DevGpu, "GPU"), (DevCpu, "CPU") })
-                rb.Click += (_, _) => { Set("stt_device", dev); AppRef.RestartDictationSoon(); SysStatus.Text = "Перезапускаю диктовку с новым устройством…"; };
+                rb.Click += async (_, _) => { Set("stt_device", dev); await RestartAndWait(SysStatus); };
+            foreach (var (rb, dev) in new[] { (LlmDevAuto, "auto"), (LlmDevNpu, "NPU"), (LlmDevGpu, "GPU"), (LlmDevCpu, "CPU") })
+                rb.Click += (_, _) => ChooseLlmDevice(dev);
+            foreach (var (rb, size) in new[] { (SttAuto, "auto"), (SttSmall, "small"), (SttTurbo, "turbo") })
+                rb.Click += async (_, _) => await ChooseStt(size);
             ExportBtn.Click += (_, _) => Export();
             ImportBtn.Click += (_, _) => Import();
             DiagBtn.Click += async (_, _) => await Diagnostics();
@@ -130,7 +153,7 @@ namespace ClawVoice
             if (page == PageVoice) LoadVoicePage();
             if (page == PageCmd) CmdFill();
             if (page == PagePlug) PlugFill();
-            if (page == PageSys) LoadSysPage();
+            if (page == PageSys) { LoadSysPage(); _ = FillModels(); }
             if (page == PageTg) TgStatus.Text = Read()["telegram_chat_id"] is { } id ? $"Привязан чат {id}" : "Бот ещё не привязан";
         }
 
@@ -164,7 +187,7 @@ namespace ClawVoice
             catch (Exception e) { Log.Write("settings: " + e.Message); }
         }
 
-        static string AssistantName() => (string?)Read()["assistant_name"] ?? "Мурмур";
+        static string AssistantName() => (string?)Read()["assistant_name"] ?? "Сэйсо";
 
         public void Reload()
         {
@@ -174,13 +197,18 @@ namespace ClawVoice
             RateSlider.Value = (double?)s["tts_rate"] ?? 0;
             VolumeSlider.Value = (double?)s["tts_volume"] ?? 100;
             WarmSwitch.IsChecked = (bool?)s["warm_mic"] ?? true;
+            BeepSwitch.IsChecked = (bool?)s["beeps"] ?? true;
             OfflineSwitch.IsChecked = (bool?)s["offline"] ?? false;
             AutostartSwitch.IsChecked = Autostart.IsSet();
             NameBox.Text = AssistantName();
             string lang = (string?)s["language"] ?? "ru";
             (lang == "en" ? LangEn : lang == "auto" ? LangAuto : LangRu).IsChecked = true;
+            ((string?)s["mic_processing"] == "normal" ? MicProcOff : MicProcHw).IsChecked = true;
             string dev = (string?)s["stt_device"] ?? "auto";
             (dev == "NPU" ? DevNpu : dev == "GPU" ? DevGpu : dev == "CPU" ? DevCpu : DevAuto).IsChecked = true;
+            string stt = (string?)s["stt_model"] ?? "auto";
+            (stt == "small" ? SttSmall : stt == "turbo" ? SttTurbo : SttAuto).IsChecked = true;
+            Gate();
             var llm = s["llm"] as JsonObject ?? new JsonObject();
             string prov = (string?)llm["provider"] ?? "none";
             (prov == "none" ? ProvNone : prov == "server" ? ProvServer : prov == "cloud" ? ProvCloud : ProvNpu).IsChecked = true;
@@ -216,19 +244,30 @@ namespace ClawVoice
             ListenSub.Text = listen ? "Слушаю имя от сети, микрофон всегда открыт" : "Выключено, зови кнопкой";
             string prov = (string?)(Read()["llm"] as JsonObject)?["provider"] ?? "none";
             bool npu = prov == "npu";
+            // the switch only loads / unloads the local Gemma: with any other variant it would stay grey for nothing
+            GemmaRow.Visibility = GemmaLine.Visibility = npu ? Visibility.Visible : Visibility.Collapsed;
             GemmaSwitch.IsEnabled = npu;
             GemmaTitle.Text = npu ? "Gemma загружена" : "Языковая модель";
             bool gemma = Stack.GemmaWanted;
             GemmaSwitch.IsChecked = npu && gemma;
             GemmaSub.Text = !npu ? (prov == "none" ? "Без модели: команды и ответы из интернета" : "Внешняя модель, настраивается на вкладке «Модель»")
-                : App.GemmaLoaded ? "На NPU, около 3.8 ГБ памяти" : gemma ? "Загружается…" : "Выгружена: простые команды работают, разговор нет";
+                : App.GemmaLoaded ? "В памяти, около 3.8 ГБ. Выключи, чтобы освободить" : gemma ? "Загружается…" : "Выгружена: простые команды работают, разговор нет";
             StatusText.Text = "";
         }
 
         // ---------------- hotkeys (voice_settings.parse_hotkey format; Python re-registers within a second)
 
-        const string DefaultDictation = "Ctrl+Alt+Win+W", DefaultGemma = "Ctrl+Win+Shift+G";
+        public const string DefaultDictation = "Win+Ctrl+Alt+W", DefaultGemma = "Win+Ctrl+Shift+G";
         const int CaptureSec = 10;
+
+        /// <summary>A combination as the user reads it: Win first, then Ctrl, Alt, Shift, the key (any stored order).</summary>
+        public static string HotkeyText(string? combo)
+        {
+            if (string.IsNullOrWhiteSpace(combo)) return "";
+            string[] order = { "win", "ctrl", "alt", "shift" };
+            var parts = combo.Replace(" ", "").Split('+', StringSplitOptions.RemoveEmptyEntries);
+            return string.Join("+", parts.OrderBy(p => { int i = Array.IndexOf(order, p.ToLowerInvariant()); return i < 0 ? 9 : i; }));
+        }
         Button? _capturing;
         readonly DispatcherTimer _captureTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
         DateTime _captureUntil;
@@ -237,8 +276,8 @@ namespace ClawVoice
         void ShowHotkeys()
         {
             var s = Read();
-            HotkeyDictation.Content = (string?)s["hotkey_dictation"] ?? DefaultDictation;
-            HotkeyGemma.Content = (string?)s["hotkey_gemma"] ?? DefaultGemma;
+            HotkeyDictation.Content = HotkeyText((string?)s["hotkey_dictation"] ?? DefaultDictation);
+            HotkeyGemma.Content = HotkeyText((string?)s["hotkey_gemma"] ?? DefaultGemma);
         }
 
         void Capture(Button b)
@@ -290,8 +329,8 @@ namespace ClawVoice
                 HotkeyHint.Text = "Нужен хотя бы один модификатор (Ctrl, Alt, Shift, Win) или F13–F24 / Pause";
                 return;
             }
-            string combo = (mods.HasFlag(ModifierKeys.Control) ? "Ctrl+" : "") + (mods.HasFlag(ModifierKeys.Alt) ? "Alt+" : "") +
-                           (win ? "Win+" : "") + (mods.HasFlag(ModifierKeys.Shift) ? "Shift+" : "") + KeyName(key);
+            string combo = (win ? "Win+" : "") + (mods.HasFlag(ModifierKeys.Control) ? "Ctrl+" : "") +
+                           (mods.HasFlag(ModifierKeys.Alt) ? "Alt+" : "") + (mods.HasFlag(ModifierKeys.Shift) ? "Shift+" : "") + KeyName(key);
             var other = _capturing == HotkeyDictation ? HotkeyGemma : HotkeyDictation;
             if (string.Equals(other.Content as string, combo, StringComparison.OrdinalIgnoreCase))
             {
@@ -351,6 +390,8 @@ namespace ClawVoice
             if (name.Length < 2) { NameHint.Text = "Имя слишком короткое"; return; }
             var names = (Read()["wake_names"] as JsonArray)?.Select(x => (string)x!).ToList() ?? new List<string>();
             string low = name.ToLowerInvariant();
+            // a new name starts its own list: the old name's spellings kept waking the assistant on the old name
+            if (!string.Equals(AssistantName(), name, StringComparison.OrdinalIgnoreCase)) names.Clear();
             if (!names.Contains(low)) names.Insert(0, low);
             Set("assistant_name", name);
             Set("wake_names", new JsonArray(names.Select(n => (JsonNode)n!).ToArray()));
@@ -373,7 +414,7 @@ namespace ClawVoice
                 : "Gemma ещё не скачана (3.3 ГБ). Нужен бесплатный аккаунт Hugging Face, где принята лицензия Gemma, и его токен.";
             GemmaGet.Visibility = _gemmaHere ? Visibility.Collapsed : Visibility.Visible;
             ProvHint.Text = ProvNone.IsChecked == true ? "Команды, плагины и ответы из интернета работают без модели. Свободного разговора нет."
-                : ProvNpu.IsChecked == true ? "Gemma 3 4B прямо на NPU этого компьютера, без интернета. Загрузка около 10 секунд, 3.8 ГБ памяти."
+                : ProvNpu.IsChecked == true ? "Gemma 3 4B прямо на этом компьютере, без интернета. Около 4 ГБ памяти, устройство выбирается ниже."
                 : ProvServer.IsChecked == true ? "Свой сервер: Ollama (http://127.0.0.1:11434), LM Studio (http://127.0.0.1:1234), llama.cpp."
                 : "Облачная модель. Бесплатный Gemini: адрес и модель уже подставлены, нужен только ключ. Фразы для модели уходят в интернет.";
             if (ProvServer.IsChecked == true && (string.IsNullOrWhiteSpace(UrlBox.Text) || UrlBox.Text.Contains(":8081")))
@@ -385,16 +426,26 @@ namespace ClawVoice
             }
         }
 
-        /// <summary>"На NPU" only where there is an NPU: Gemma makes no sense on a CPU. Also: is Gemma downloaded.</summary>
+        /// <summary>"Локально" on every PC (on a CPU it is slow, the hint says so); the NPU option only where there is
+        /// one. Also: is Gemma downloaded.</summary>
         async Task DetectNpu()
         {
             var hw = await Task.Run(() => Stack.Cli("hw"));
             var m = await Task.Run(() => Stack.Cli("models"));
             _gemmaHere = (bool?)m["gemma"] == true;
-            bool npu = (bool?)hw["npu"] == true;
-            ProvNpu.Visibility = npu ? Visibility.Visible : Visibility.Collapsed;
-            if (!npu && ProvNpu.IsChecked == true) ProvNone.IsChecked = true;
+            LlmDevNpu.Visibility = (bool?)hw["npu"] == true ? Visibility.Visible : Visibility.Collapsed;
+            string dev = (string?)Read()["llm_device"] ?? "auto";
+            (dev == "NPU" ? LlmDevNpu : dev == "GPU" ? LlmDevGpu : dev == "CPU" ? LlmDevCpu : LlmDevAuto).IsChecked = true;
             ModelFields();
+        }
+
+        /// <summary>Where the local Gemma runs; a loaded one is reloaded on the new device.</summary>
+        void ChooseLlmDevice(string dev)
+        {
+            Set("llm_device", dev);
+            if (!App.GemmaLoaded && !Stack.GemmaWanted) return;
+            GemmaState.Text = "Перезагружаю Gemma на новом устройстве, это до полуминуты…";
+            Task.Run(() => { AppRef.SetGemma(false); System.Threading.Thread.Sleep(1500); AppRef.SetGemma(true); });
         }
 
         async Task GetGemma()
@@ -403,9 +454,12 @@ namespace ClawVoice
             if (token.Length == 0) { GemmaState.Text = "Вставь токен Hugging Face."; return; }
             GemmaGetBtn.IsEnabled = false;
             GemmaState.Text = "Скачиваю Gemma, 3.3 ГБ. Это может занять от нескольких минут до получаса, окно можно закрыть позже…";
+            var progress = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            progress.Tick += (_, _) => { if (ReadProgress("gemma") is { } p) GemmaState.Text = $"Скачиваю Gemma: {p}. Окно можно закрыть позже."; };
+            progress.Start();
             var r = await Task.Run(() => Stack.Cli("gemma-download", token, 3 * 3600 * 1000));
-            HfTokenBox.Password = "";
-            GemmaGetBtn.IsEnabled = true;
+            progress.Stop();
+            HfTokenBox.Password = "";  // (greys the button again: a new try needs the token pasted again)
             if (r["error"] is { } err) { GemmaState.Text = "Не скачалась: " + err; return; }
             _gemmaHere = true;
             ModelFields();
@@ -425,7 +479,11 @@ namespace ClawVoice
                 KeyBox.Password = "";
                 if (r["error"] is { } err) { ModelStatus.Text = "Ключ не сохранён: " + err; return; }
             }
-            ModelStatus.Text = "Сохранено. " + (prov == "npu" ? "Gemma включается тумблером на вкладке «Основное»." : "");
+            bool unlocked = !AssistantOn;
+            Set("assistant", true);  // a dictation-only install gets the assistant once a variant is chosen here
+            Gate();
+            ModelStatus.Text = "Сохранено. " + (unlocked ? "Помощник включён. " : "") +
+                               (prov == "npu" ? "Gemma включается тумблером на вкладке «Основное»." : "");
             if (prov != "npu" && Stack.GemmaWanted) Task.Run(() => AppRef.SetGemma(false));  // free the NPU memory
         }
 
@@ -435,6 +493,7 @@ namespace ClawVoice
             ModelStatus.Text = "Спрашиваю модель…";
             var r = await Task.Run(() => Stack.Cli("llm-test", null, 120000));
             ModelStatus.Text = r["error"] is { } err ? "Не ответила: " + err : $"Ответила за {r["seconds"]} с: «{r["text"]}»";
+            Toast(r["error"] is null ? $"Модель работает, ответила за {r["seconds"]} с" : ModelStatus.Text, r["error"] is null);
         }
 
         async Task SetCity()
@@ -460,6 +519,23 @@ namespace ClawVoice
 
         // ---------------- telegram page
 
+        /// <summary>A result the user must not miss ("Проверить"): a card over the window for a few seconds.</summary>
+        void Toast(string text, bool ok)
+        {
+            var body = new TextBlock { Text = (ok ? "✓  " : "✕  ") + text, TextWrapping = TextWrapping.Wrap, MaxWidth = 460, FontSize = 15,
+                                       Foreground = System.Windows.Media.Brushes.White };
+            var card = new Border { CornerRadius = new CornerRadius(14), Padding = new Thickness(20, 14, 20, 14), Child = body,
+                Background = new System.Windows.Media.SolidColorBrush(ok ? System.Windows.Media.Color.FromRgb(0x2E, 0x7D, 0x4F)
+                                                                         : System.Windows.Media.Color.FromRgb(0xA8, 0x3A, 0x3A)),
+                Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 3, Opacity = 0.4 } };
+            var pop = new System.Windows.Controls.Primitives.Popup { Child = card, AllowsTransparency = true, PlacementTarget = this,
+                Placement = System.Windows.Controls.Primitives.PlacementMode.Center, StaysOpen = true, IsOpen = true };
+            card.MouseLeftButtonUp += (_, _) => pop.IsOpen = false;
+            var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(ok ? 3 : 6) };
+            t.Tick += (_, _) => { t.Stop(); pop.IsOpen = false; };
+            t.Start();
+        }
+
         async Task TgLink()
         {
             string token = TgTokenBox.Password.Trim();
@@ -468,8 +544,9 @@ namespace ClawVoice
             var r = await Task.Run(() => Stack.Cli("tg-link " + Stack.Quote(token)));
             TgTokenBox.Password = "";
             TgStatus.Text = r["error"] is { } err ? "Не получилось: " + err
-                : r["chat_id"] is null ? "Токен сохранён, но сообщений нет. Напиши боту /start и нажми «Привязать» ещё раз."
+                : r["chat_id"] is null ? "Токен сохранён, но бот не видит новых сообщений. Напиши ему сейчас что угодно (например /start) и нажми «Привязать» ещё раз."
                 : $"Привязано: {r["name"]} (чат {r["chat_id"]})";
+            Toast(TgStatus.Text, r["error"] is null && r["chat_id"] is not null);
         }
 
         // ---------------- commands page (JSON file, same format as commands.py)
@@ -606,12 +683,210 @@ namespace ClawVoice
             if (_sysLoaded) return;
             _sysLoaded = true;
             var r = await Task.Run(() => Stack.Cli("hw"));
-            var m = await Task.Run(() => Stack.Cli("models"));
-            string devs = string.Join(", ", (r["openvino"] as JsonArray)?.Select(x => (string)x!) ?? Array.Empty<string>());
-            string models = string.Join(", ", m.Where(kv => kv.Value is JsonValue v && v.TryGetValue(out bool b) && b).Select(kv => kv.Key));
+            _hasNpu = (bool?)r["npu"] == true;
+            // "NPU, видеокарта Arc 140V, процессор": the GPU's own name goes next to it, without the (R)(TM)(16GB) noise
+            var found = (r["openvino"] as JsonArray)?.Select(x => (string)x!).ToList() ?? new List<string>();
+            string gpu = System.Text.RegularExpressions.Regex.Replace((string?)r["gpu"] ?? "", @"\((R|TM|\d+GB|iGPU|dGPU)\)|Intel|GPU", "").Trim();
+            gpu = System.Text.RegularExpressions.Regex.Replace(gpu, @"\s+", " ");
+            var names = new List<string>();
+            if (found.Contains("NPU")) names.Add("NPU");
+            if (found.Any(d => d.StartsWith("GPU"))) names.Add(gpu.Length > 0 ? $"видеокарта {gpu}" : "видеокарта");
+            names.Add("процессор");
+            string rec = (string?)r["recommend"] switch { "NPU" => "NPU", "GPU" => "видеокарта", _ => "процессор" };
             HwText.Text = r["error"] is { } err ? "Не удалось определить железо: " + err
-                : $"Найдено: {devs}" + ((string?)r["gpu"] is { Length: > 0 } g ? $" ({g})" : "") +
-                  $". Рекомендую: {r["recommend"]}. Модели распознавания: {(models.Length > 0 ? models : "нет")}.";
+                : $"Найдено: {string.Join(", ", names)}. Рекомендую: {rec}.";
+            _ = FillModels();
+        }
+
+        // ---------------- assistant on/off (dictation-only install)
+
+        static bool AssistantOn => (bool?)Read()["assistant"] != false;
+
+        /// <summary>Dictation only: everything that needs the assistant is greyed, the banner on "Основное" says how to
+        /// turn it on. The "Модель" tab stays open: choosing a variant there turns the assistant on.</summary>
+        void Gate()
+        {
+            bool on = AssistantOn;
+            MinimalBanner.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+            foreach (UIElement e in new UIElement[] { ListenRow, GemmaRow, HotkeyGemma, NameSection, FollowLabel, FollowRow, VoiceSection, TabTg, TabCmd, TabPlug })
+            {
+                e.IsEnabled = on;
+                e.Opacity = on ? 1 : 0.45;
+            }
+            if (!on && (TabTg.IsChecked == true || TabCmd.IsChecked == true || TabPlug.IsChecked == true)) TabMain.IsChecked = true;
+        }
+
+        // ---------------- speech models (system page)
+
+        bool _hasNpu, _modelBusy;
+        JsonObject _models = new();
+
+        /// <summary>The device dictation runs on now (stt_state.json), else what the hardware check recommends.</summary>
+        string RunningDevice() => (string?)(_models["state"] as JsonObject)?["device"] ?? (_hasNpu ? "NPU" : "CPU");
+
+        /// <summary>The catalog key a size needs on a device: the same rule as voice_settings.whisper_key.</summary>
+        static string SttKey(string size, string device)
+        {
+            if (size is not ("small" or "turbo")) size = device == "GPU" ? "turbo" : "small";
+            return size == "turbo" && device == "NPU" ? "turbo-npu" : size;
+        }
+
+        static readonly (string Key, string Title, string Note)[] ModelCatalog =
+        {
+            ("small", "Распознавание: быстрая (Whisper small)", "для NPU, видеокарты и процессора, ~0.8 ГБ памяти"),
+            ("turbo", "Распознавание: точная (Whisper turbo)", "для видеокарты и процессора, ~1.3-2 ГБ памяти"),
+            ("turbo-npu", "Распознавание: точная для NPU", "первый запуск готовится ~6 мин, ~2 ГБ памяти"),
+            ("gemma", "Языковая модель Gemma 3 4B", "помощник на этом ПК, ~4 ГБ памяти, скачивается с токеном"),
+        };
+
+        async Task FillModels()
+        {
+            var m = await Task.Run(() => Stack.Cli("models"));
+            if (m["error"] is { } err) { ModelsStatus.Text = "Не удалось прочитать модели: " + err; return; }
+            _models = m;
+            var info = m["info"] as JsonObject ?? new JsonObject();
+            string preparing = (string?)(m["state"] as JsonObject)?["preparing"] ?? "";
+            ModelRows.Children.Clear();
+            foreach (var (key, title, note) in ModelCatalog)
+            {
+                if (info[key] is not JsonObject mi) continue;
+                if (key == "turbo-npu" && !_hasNpu && (bool?)mi["installed"] != true) continue;
+                bool installed = (bool?)mi["installed"] == true, active = (bool?)mi["active"] == true;
+                if (ModelRows.Children.Count > 0) ModelRows.Children.Add(new Border { Height = 1, Background = (System.Windows.Media.Brush)FindResource("Border") });
+                var row = new Grid { Margin = new Thickness(0, 8, 0, 8) };
+                row.ColumnDefinitions.Add(new ColumnDefinition());
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var texts = new StackPanel { Margin = new Thickness(0, 0, 10, 0) };
+                texts.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                string state = !installed ? "не скачана" : preparing == key ? "готовится для NPU" : active ? "используется" : "скачана";
+                var sub = new TextBlock { Text = $"{FormatMb((int?)mi["mb"] ?? 0)}, {state}. {char.ToUpper(note[0]) + note[1..]}", FontSize = 12, TextWrapping = TextWrapping.Wrap };
+                sub.SetResourceReference(TextBlock.ForegroundProperty, "Sub");
+                texts.Children.Add(sub);
+                row.Children.Add(texts);
+                var btn = new Button { Style = (Style)FindResource("Flat"), Height = 30, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+                                       Content = installed ? "Удалить" : "Скачать", IsEnabled = !_modelBusy && !active && preparing != key };
+                if (active) btn.ToolTip = "Сейчас используется: сначала выбери другую модель";
+                Grid.SetColumn(btn, 1);
+                _modelBtn[key] = btn;
+                string k = key, dir = (string?)mi["dir"] ?? "";
+                int mb = (int?)mi["mb"] ?? 0;
+                btn.Click += async (_, _) =>
+                {
+                    if (installed) await RemoveModel(k, title);
+                    else if (k == "gemma") { TabModel.IsChecked = true; ProvNpu.IsChecked = true; ModelFields(); }
+                    else await DownloadModel(k, dir, mb);
+                };
+                row.Children.Add(btn);
+                ModelRows.Children.Add(row);
+            }
+        }
+
+        // one style with the other texts ("0.8 ГБ", "3.3 ГБ"): decimal point, 1 ГБ = 1000 МБ as the catalog sizes are given
+        static string FormatMb(int mb) => mb >= 1000 ? (mb / 1000.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " ГБ" : $"{mb} МБ";
+
+        async Task<bool> DownloadModel(string key, string dir, int mb)
+        {
+            if (_modelBusy) return false;
+            _modelBusy = true;
+            string path = Path.Combine(Stack.Dir, dir);
+            var progress = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            progress.Tick += (_, _) =>
+            {
+                string p = ReadProgress(key) ?? $"{DirMb(path)} из {mb} МБ";
+                ModelsStatus.Text = $"Скачиваю: {p}. Окно можно закрыть, загрузка продолжится.";
+                if (_modelBtn.TryGetValue(key, out var b)) b.Content = p.Split(',')[0];  // "37%" right on the row
+            };
+            ModelsStatus.Text = "Скачиваю…";
+            await FillModels();
+            if (_modelBtn.TryGetValue(key, out var first)) first.Content = "0%";
+            progress.Start();
+            var r = await Task.Run(() => Stack.Cli("download " + key, null, 3 * 3600 * 1000));
+            progress.Stop();
+            _modelBusy = false;
+            bool ok = r["error"] is null;
+            ModelsStatus.Text = ok ? "Модель скачана." : $"Не скачалась: {r["error"]}. Возможно, для скачивания потребуется VPN. Повтори загрузку: скачанное не пропадёт.";
+            await FillModels();
+            return ok;
+        }
+
+        async Task RemoveModel(string key, string title)
+        {
+            if (_modelBusy) return;
+            _modelBusy = true;
+            ModelsStatus.Text = "Удаляю…";
+            var r = await Task.Run(() => Stack.Cli("remove " + key));
+            _modelBusy = false;
+            ModelsStatus.Text = r["error"] is { } err ? "Не удалилась: " + err : $"Удалено: {title}.";
+            if (key == "gemma") _gemmaHere = r["error"] is not null;
+            await FillModels();
+        }
+
+        /// <summary>A new speech model size: download it first when this device has no copy, then restart dictation.</summary>
+        async Task ChooseStt(string size)
+        {
+            Set("stt_model", size);
+            if (_models["info"] is null) await FillModels();
+            string key = SttKey(size, RunningDevice());
+            if (_models["info"]?[key] is JsonObject mi && (bool?)mi["installed"] != true)
+            {
+                if (!await DownloadModel(key, (string?)mi["dir"] ?? "", (int?)mi["mb"] ?? 0)) return;
+            }
+            await RestartAndWait(ModelsStatus, key == "turbo-npu"
+                ? " Точная модель для NPU в первый раз готовится около 6 минут, пока работает быстрая." : "");
+            await FillModels();
+        }
+
+        bool _restarting;
+
+        /// <summary>Restart dictation and show that it is not working meanwhile: a ticking "Перезапускаю…" until dictate.py
+        /// writes stt_state.json with the model it loaded (up to 2 min), the device and model choices locked.</summary>
+        async Task RestartAndWait(TextBlock status, string extra = "")
+        {
+            if (_restarting) return;
+            _restarting = true;
+            var locked = new UIElement[] { DevAuto, DevNpu, DevGpu, DevCpu, SttAuto, SttSmall, SttTurbo };
+            foreach (var e in locked) e.IsEnabled = false;
+            string file = Path.Combine(Stack.Dir, "stt_state.json");
+            DateTime since = DateTime.Now;
+            AppRef.RestartDictationSoon();
+            string[] spin = { "◐", "◓", "◑", "◒" };
+            int i = 0;
+            JsonNode? state = null;
+            while ((DateTime.Now - since).TotalSeconds < 120)
+            {
+                status.Text = $"{spin[i++ % 4]}  Перезапускаю распознавание, диктовка пока не работает… {(int)(DateTime.Now - since).TotalSeconds} с";
+                await Task.Delay(500);
+                try
+                {
+                    if (File.Exists(file) && File.GetLastWriteTime(file) > since) { state = JsonNode.Parse(File.ReadAllText(file)); break; }
+                }
+                catch { }
+            }
+            foreach (var e in locked) e.IsEnabled = true;
+            _restarting = false;
+            status.Text = state is null ? "Распознавание долго не запускается. Подробности в dictate.log в папке программы."
+                : $"Готово: {state["model"]} на {state["device"]}.{extra}";
+        }
+
+        readonly Dictionary<string, Button> _modelBtn = new();
+
+        /// <summary>"37%, 290 из 789 МБ" from download_progress.json (sayso_cli writes it every second), or null.</summary>
+        static string? ReadProgress(string key)
+        {
+            try
+            {
+                var j = JsonNode.Parse(File.ReadAllText(Path.Combine(Stack.Dir, "download_progress.json")))!;
+                if ((string?)j["key"] != key) return null;
+                int mb = (int?)j["mb"] ?? 0, total = Math.Max(1, (int?)j["total"] ?? 1);
+                return $"{Math.Min(99, mb * 100 / total)}%, {mb} из {total} МБ";
+            }
+            catch { return null; }
+        }
+
+        static long DirMb(string dir)
+        {
+            try { return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length) / (1 << 20); }
+            catch { return 0; }
         }
 
         void Export()
