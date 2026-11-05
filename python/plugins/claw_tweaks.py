@@ -4,7 +4,7 @@
 # A phrase is read as action + object + value, so the user does not have to remember exact wording:
 # "убери фпс", "спрячь оверлей" and "выключи мониторинг" are the same command. Registers nothing on a PC
 # without ClawTweaks.
-import importlib, os, re, sys
+import json, importlib, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -37,6 +37,10 @@ ECO = (r"\bэко\w*|\beco\b|энергосбереж|тих\w* режим|ре�
        r"минимальн\w* (?:мощн|режим|производительн)")
 MEDIUM = (r"средн\w* (?:режим|мощн|тдп|ти ?ди ?пи|производительн|уровен)|(?:режим|тдп|мощност\w*) средн|"
           r"баланс|сбалансир|обычн\w* режим|стандартн\w* режим")
+# "максимальная экономия": 8 W, CPU boost off, 48 Hz, an RTSS limit of 48 FPS, brightness 10 (the user's own set)
+MAX_SAVING = (r"максимальн\w* (?:эконом|энергосбереж)|макс\w* эконом|эконом\w* (?:по максимуму|на максимум)|"
+              r"самый экономн|самая экономн|экономн\w* по максимуму")
+SAVING = {"tdp": 8, "hz": 48, "fps": 48, "brightness": 10}
 HIGH = (r"(?:высок\w*|максимальн\w*|полн\w*|всю) (?:производительн|мощн)|производительн\w* режим|режим производительн|"
         r"игров\w* режим|на полную мощн|\bperformance|перформанс")
 TURBO = r"турбо|\bturbo|выжми"
@@ -216,6 +220,86 @@ def _set_preset(key):
         msg, ok = _set_pair(*w)
         return (f"Режим {label}: {msg}" if msg.startswith("PL1 ") else msg), ok
     return _set_tdp(w, label)
+
+
+def _saving_file():
+    return os.path.join(A.voice_settings.USER_DIR, "claw_max_saving.json")
+
+
+def _brightness_now():
+    rc, out = A._ps_out("(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightness).CurrentBrightness")
+    return int(out) if rc == 0 and out.strip().isdigit() else None
+
+
+def max_saving(p):
+    """One phrase, four settings; "выключи максимальную экономию" puts back what was there before (kept in a file, so
+    it survives a restart). Ahead of power(): ECO ("эко…") would catch "экономия" and set only the TDP."""
+    if not has(MAX_SAVING, p):
+        return None
+    if has(OFF, p) or has(r"\bотмен\w*|\bзаверш\w*|\bхватит\b|\bпрекрат\w*", p):  # "отмени / выключим максимальную экономию"
+        return _saving_off()
+    try:  # what to return to: only the first time, a second "максимальная экономия" must not save the saving itself
+        if not os.path.exists(_saving_file()):
+            before = {"boost": ct.get_bool(ct.TDP_BOOST), "tdp": ct.get_int(ct.TDP), "cpu_boost": ct.get_bool(ct.CPU_BOOST),
+                      "pl2": ct.get_int(ct.TDP_BOOST_PL2), "hz": ct.get_int(ct.REFRESH_RATE),
+                      "fps": ct.get_int(ct.FPS_LIMIT, 0), "brightness": _brightness_now()}
+            with open(_saving_file(), "w", encoding="utf-8") as f:
+                json.dump(before, f)
+    except Exception as e:
+        A.log(f"max saving: could not keep the old values: {e!r}")
+    done = []
+    if ct.set_(ct.TDP_BOOST, False) is not None and ct.set_(ct.TDP, SAVING["tdp"]) is not None:
+        done.append(f"{SAVING['tdp']} ватт")
+    if ct.set_(ct.CPU_BOOST, False) is not None:
+        done.append("буст выключен")
+    rates = [int(x) for x in re.findall(r"\d+", ct.get(ct.REFRESH_RATES) or "")]
+    hz = SAVING["hz"] if SAVING["hz"] in rates else min(rates) if rates else None
+    if hz and ct.set_(ct.REFRESH_RATE, hz) is not None:
+        done.append(f"{hz} герц")
+    if ct.set_(ct.FPS_LIMIT, SAVING["fps"]) is not None:
+        done.append(f"лимит {SAVING['fps']} кадров")
+    try:
+        A.brightness(level=SAVING["brightness"])
+        done.append(f"яркость {SAVING['brightness']}")
+    except Exception as e:
+        A.log(f"max saving: brightness failed: {e!r}")
+    if not done:
+        return NO_ANSWER
+    return "Максимальная экономия: " + ", ".join(done), False
+
+
+def _saving_off():
+    try:
+        with open(_saving_file(), encoding="utf-8") as f:
+            b = json.load(f)
+    except (OSError, ValueError):
+        return "Максимальная экономия не включена, возвращать нечего", False
+    done = []
+    if b.get("tdp"):
+        if b.get("boost") and b.get("pl2"):
+            ok = all(ct.set_(fn, v) is not None for fn, v in ((ct.TDP_BOOST, True), (ct.TDP, b["tdp"]), (ct.TDP_BOOST_PL2, b["pl2"])))
+            label = f"{b['tdp']}/{b['pl2']} ватт"
+        else:
+            ok = ct.set_(ct.TDP_BOOST, False) is not None and ct.set_(ct.TDP, b["tdp"]) is not None
+            label = f"{b['tdp']} ватт"
+        if ok:
+            done.append(label)
+    if b.get("cpu_boost") is not None and ct.set_(ct.CPU_BOOST, b["cpu_boost"]) is not None:
+        done.append(f"буст {'включён' if b['cpu_boost'] else 'выключен'}")
+    if b.get("hz") and ct.set_(ct.REFRESH_RATE, b["hz"]) is not None:
+        done.append(f"{b['hz']} герц")
+    if b.get("fps") is not None and ct.set_(ct.FPS_LIMIT, b["fps"]) is not None:
+        done.append(f"лимит {b['fps']} кадров" if b["fps"] else "без лимита кадров")
+    if b.get("brightness") is not None:
+        try:
+            A.brightness(level=b["brightness"])
+            done.append(f"яркость {b['brightness']}")
+        except Exception as e:
+            A.log(f"max saving off: brightness failed: {e!r}")
+    if not done:
+        return NO_ANSWER
+    os.remove(_saving_file())
+    return "Вернула как было: " + ", ".join(done), False
 
 
 def power(p):
@@ -459,7 +543,7 @@ def sensors(p):
     return None
 
 
-HANDLERS = (game, charge, overlay, fans, boost, power, controller, switches, sensors)
+HANDLERS = (max_saving, game, charge, overlay, fans, boost, power, controller, switches, sensors)
 
 
 def route(p, text):
@@ -489,7 +573,7 @@ def register(api):
              "мышь или геймпад, оверлей и его позиция, лимит FPS, частота экрана, пауза или закрытие игры, "
              "режим Xbox, шумоподавление, датчики. what = просьба пользователя своими словами", tool)
     api.help("🎮 ClawTweaks: вентиляторы на максимум / как было · мощность 15 ватт, тдп 25 30 (PL1 и PL2), pl2 35, эко / средний / "
-             "высокая производительность / турбо режим · буст вкл/выкл · береги батарею / заряжай до конца · режим мыши / геймпада · "
+             "высокая производительность / турбо режим · максимальная экономия (8 ватт, без буста, 48 герц и 48 кадров, яркость 10) / выключи максимальную экономию · буст вкл/выкл · береги батарею / заряжай до конца · режим мыши / геймпада · "
              "покажи / убери фпс, оверлей слева внизу, подробный оверлей · ограничь фпс до 40 · частота экрана 60 · "
              "поставь игру на паузу / продолжи / закрой игру · режим Xbox · шумоподавление · "
              "температура процессора, сколько фпс, как там консоль")

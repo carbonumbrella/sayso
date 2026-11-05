@@ -474,6 +474,14 @@
             </Border>
             <TextBlock x:Name="HwText" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0" Text="Определяю железо…"/>
             <TextBlock x:Name="SysStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+            <!-- a size or device whose model is not downloaded: asked here instead of a silent fallback (SwitchStt) -->
+            <StackPanel x:Name="SttAsk" Visibility="Collapsed" Margin="4,10,0,0">
+              <TextBlock x:Name="SttAskText" FontSize="12" TextWrapping="Wrap"/>
+              <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <Button x:Name="SttAskGet" Content="Скачать и переключить" Style="{StaticResource Flat}" Height="30" FontSize="12" Padding="14,0"/>
+                <Button x:Name="SttAskCancel" Content="Отмена" Style="{StaticResource Flat}" Height="30" FontSize="12" Padding="14,0" Margin="8,0,0,0"/>
+              </StackPanel>
+            </StackPanel>
           </StackPanel>
           <StackPanel Grid.Column="2">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">

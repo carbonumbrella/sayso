@@ -146,11 +146,13 @@ namespace ClawVoice
 
             // system
             foreach (var (rb, dev) in new[] { (DevAuto, "auto"), (DevNpu, "NPU"), (DevGpu, "GPU"), (DevCpu, "CPU") })
-                rb.Click += async (_, _) => { Set("stt_device", dev); await RestartAndWait(SysStatus); };
+                rb.Click += async (_, _) => await SwitchStt(null, dev);
+            SttAskGet.Click += async (_, _) => await SttAskDownload();
+            SttAskCancel.Click += (_, _) => SttAskClose();
             foreach (var (rb, dev) in new[] { (LlmDevAuto, "auto"), (LlmDevNpu, "NPU"), (LlmDevGpu, "GPU"), (LlmDevCpu, "CPU") })
                 rb.Click += (_, _) => ChooseLlmDevice(dev);
             foreach (var (rb, size) in new[] { (SttAuto, "auto"), (SttSmall, "small"), (SttTurbo, "turbo") })
-                rb.Click += async (_, _) => await ChooseStt(size);
+                rb.Click += async (_, _) => await SwitchStt(size, null);
             AddAppFolderBtn.Click += async (_, _) => await AddAppFolder();
             ExportBtn.Click += (_, _) => Export();
             ImportBtn.Click += (_, _) => Import();
@@ -856,6 +858,7 @@ namespace ClawVoice
             _sysLoaded = true;
             var r = await Task.Run(() => Stack.Cli("hw"));
             _hasNpu = (bool?)r["npu"] == true;
+            _autoDevice = (string?)r["recommend"] ?? (_hasNpu ? "NPU" : "CPU");
             // "NPU, видеокарта Arc 140V, процессор": the GPU's own name goes next to it, without the (R)(TM)(16GB) noise
             var found = (r["openvino"] as JsonArray)?.Select(x => (string)x!).ToList() ?? new List<string>();
             string gpu = System.Text.RegularExpressions.Regex.Replace((string?)r["gpu"] ?? "", @"\((R|TM|\d+GB|iGPU|dGPU)\)|Intel|GPU", "").Trim();
@@ -866,7 +869,7 @@ namespace ClawVoice
             names.Add("процессор");
             string rec = (string?)r["recommend"] switch { "NPU" => "NPU", "GPU" => "видеокарта", _ => "процессор" };
             HwText.Text = r["error"] is { } err ? "Не удалось определить железо: " + err
-                : $"Найдено: {string.Join(", ", names)}. Рекомендую: {rec}.";
+                : $"Найдено: {string.Join(", ", names)}. Рекомендуется: {rec}.";
             _ = FillModels();
         }
 
@@ -894,6 +897,7 @@ namespace ClawVoice
         // ---------------- speech models (system page)
 
         bool _hasNpu, _modelBusy;
+        string _autoDevice = "CPU";  // "Авто" by hardware only (NPU, then an Intel GPU, then the CPU), never by models
         JsonObject _models = new();
 
         /// <summary>The device dictation runs on now (stt_state.json), else what the hardware check recommends.</summary>
@@ -996,26 +1000,88 @@ namespace ClawVoice
             await FillModels();
         }
 
-        /// <summary>A new speech model size: download it first when this device has no copy, then restart dictation.</summary>
-        async Task ChooseStt(string size)
+        (string Size, string Device, string Key)? _sttAsk;  // the switch waiting for its model
+
+        /// <summary>A new speech model size or device. Only when the model for that pair is downloaded does it switch;
+        /// otherwise the choice goes back and a question offers the download (dictation would silently fall back to
+        /// another model). "Авто" resolves the device by hardware only (_autoDevice), so a downloaded GPU model never
+        /// moves it off the NPU.</summary>
+        async Task SwitchStt(string? size, string? device)
         {
-            Set("stt_model", size);
+            var s = Read();
+            size ??= (string?)s["stt_model"] ?? "auto";
+            device ??= (string?)s["stt_device"] ?? "auto";
             if (_models["info"] is null) await FillModels();
-            string key = SttKey(size, RunningDevice());
+            string key = SttKey(size, device == "auto" ? _autoDevice : device);
             if (_models["info"]?[key] is JsonObject mi && (bool?)mi["installed"] != true)
             {
-                if (!await DownloadModel(key, (string?)mi["dir"] ?? "", (int?)mi["mb"] ?? 0)) return;
+                ShowSttChoice();  // the radio buttons back to what runs now
+                string where = (device == "auto" ? _autoDevice : device) switch { "GPU" => "видеокарты", "CPU" => "процессора", _ => "NPU" };
+                string title = (ModelCatalog.FirstOrDefault(m => m.Key == key).Title ?? key).Split(" для ")[0];  // "Точная (Whisper turbo)"
+                SttAskText.Text = $"Для {where} нужна модель «{title}», {(int?)mi["mb"] ?? 0} МБ. Она не скачана.";
+                _sttAsk = (size, device, key);
+                SttAsk.Visibility = Visibility.Visible;
+                return;
             }
-            await RestartAndWait(ModelsStatus, key == "turbo-npu"
-                ? " Точная модель для NPU в первый раз готовится около 6 минут, пока работает быстрая." : "");
+            SttAskClose();
+            await ApplyStt(size, device, key);
+        }
+
+        async Task ApplyStt(string size, string device, string key)
+        {
+            Set("stt_model", size);
+            Set("stt_device", device);
+            ShowSttChoice();
+            await RestartAndWait(SysStatus);
             await FillModels();
+        }
+
+        async Task SttAskDownload()
+        {
+            if (_sttAsk is not { } a || _models["info"]?[a.Key] is not JsonObject mi) return;
+            SttAsk.Visibility = Visibility.Collapsed;
+            if (await DownloadModel(a.Key, (string?)mi["dir"] ?? "", (int?)mi["mb"] ?? 0)) await ApplyStt(a.Size, a.Device, a.Key);
+            _sttAsk = null;
+        }
+
+        void SttAskClose()
+        {
+            _sttAsk = null;
+            SttAsk.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>What dictation really runs, from stt_state.json (dictate.py), in words: no folder names, and the
+        /// "готовится" note only while the NPU build of the accurate model is being compiled.</summary>
+        string SttStateText(JsonNode state)
+        {
+            static string Where(string? d) => d switch { "GPU" => "видеокарте", "CPU" => "процессоре", _ => "NPU" };
+            static string Model(string? dir) => (dir ?? "").Contains("small") ? "быстрая модель" : "точная модель";
+            string dev = (string?)state["device"] ?? "", model = (string?)state["model"] ?? "";
+            if ((string?)state["error"] == "no_model")
+                return $"Для {(dev == "GPU" ? "видеокарты" : dev == "CPU" ? "процессора" : "NPU")} нет скачанной модели. Скачайте её справа, в «Скачанных моделях».";
+            if ((string?)state["preparing"] == "turbo-npu")
+                return model.Contains("small")
+                    ? "Работает быстрая модель. Точная для NPU готовится первый раз, около 6 минут, потом включится сама."
+                    : "Точная модель для NPU готовится первый раз, около 6 минут. Диктовка заработает, когда она будет готова.";
+            string chosen = (string?)Read()["stt_device"] ?? "auto";
+            string moved = chosen != "auto" && chosen != dev ? $" На {Where(chosen)} запустить не удалось, подробности в dictate.log." : "";
+            return $"Готово: {Model(model)} на {Where(dev)}.{moved}";
+        }
+
+        /// <summary>The size and device radio buttons from the saved settings.</summary>
+        void ShowSttChoice()
+        {
+            var s = Read();
+            string stt = (string?)s["stt_model"] ?? "auto", dev = (string?)s["stt_device"] ?? "auto";
+            (stt == "small" ? SttSmall : stt == "turbo" ? SttTurbo : SttAuto).IsChecked = true;
+            (dev == "NPU" ? DevNpu : dev == "GPU" ? DevGpu : dev == "CPU" ? DevCpu : DevAuto).IsChecked = true;
         }
 
         bool _restarting;
 
         /// <summary>Restart dictation and show that it is not working meanwhile: a ticking "Перезапускаю…" until dictate.py
         /// writes stt_state.json with the model it loaded (up to 2 min), the device and model choices locked.</summary>
-        async Task RestartAndWait(TextBlock status, string extra = "")
+        async Task RestartAndWait(TextBlock status)
         {
             if (_restarting) return;
             _restarting = true;
@@ -1040,7 +1106,7 @@ namespace ClawVoice
             foreach (var e in locked) e.IsEnabled = true;
             _restarting = false;
             status.Text = state is null ? "Распознавание долго не запускается. Подробности в dictate.log в папке программы."
-                : $"Готово: {state["model"]} на {state["device"]}.{extra}";
+                : SttStateText(state);
         }
 
         // ---------------- program folders (system page): settings "app_folders", searched by "открой …"

@@ -77,7 +77,9 @@ def _model_for(device):
     for key in order:
         if _vs.whisper_complete(key) and (key != "turbo-npu" or os.path.exists(_npu_ready(key))):
             return _vs.whisper_dir(key)
-    return _vs.whisper_dir("small")
+    if _vs.whisper_complete("turbo-npu") and device == "NPU":  # no small to dictate meanwhile: compile while loading
+        return _vs.whisper_dir("turbo-npu")
+    return None  # nothing downloaded for this device (it used to load the missing small and restart in a loop)
 
 
 def _cache_dir(model):
@@ -92,6 +94,11 @@ def _npu_ready(key):
 
 DEVICE = _pick_device()
 MODEL = _model_for(DEVICE)
+if MODEL is None:  # Settings shows "no model for this device" from this state instead of "долго не запускается"
+    with open(os.path.join(HERE, "stt_state.json"), "w", encoding="utf-8") as _f:
+        json.dump({"model": "", "device": DEVICE, "preparing": "", "error": "no_model"}, _f)
+    print(f"no downloaded speech model for {DEVICE}: download one in Settings, Распознавание", flush=True)
+    sys.exit(3)
 _lang = os.environ.get("DICTATE_LANG")
 if _lang is None:
     _l = _vs.get("language") or "ru"
@@ -114,6 +121,11 @@ HOTKEYS = voice_settings.hotkeys()
 user32 = ctypes.windll.user32
 
 print(f"loading Whisper on {DEVICE} ...", flush=True)
+_compiling = os.path.basename(MODEL) == os.path.basename(_vs.whisper_dir("turbo-npu")) and \
+    not os.path.exists(_npu_ready("turbo-npu"))
+if _compiling:  # the first load compiles it (~6 min): Settings says so meanwhile
+    with open(os.path.join(HERE, "stt_state.json"), "w", encoding="utf-8") as _f:
+        json.dump({"model": os.path.basename(MODEL), "device": DEVICE, "preparing": "turbo-npu"}, _f)
 _noted = DEVICE != "CPU" and not _crashed_on()
 if _noted:
     with open(LOADING_FILE, "w") as _f:
@@ -125,6 +137,8 @@ except Exception as e:  # an old NPU/GPU driver: fall back instead of leaving th
     for DEVICE in [d for d in ("GPU", "CPU") if d != DEVICE]:
         try:
             MODEL = _model_for(DEVICE)
+            if MODEL is None:
+                raise RuntimeError(f"no downloaded model for {DEVICE}")
             pipe = ov_genai.WhisperPipeline(MODEL, DEVICE, CACHE_DIR=_cache_dir(MODEL))
             break
         except Exception as e2:
@@ -133,6 +147,8 @@ except Exception as e:  # an old NPU/GPU driver: fall back instead of leaving th
         raise
 if _noted:  # loaded: not a crash. A note we skipped (previous crash) stays, the uninstaller removes it
     os.remove(LOADING_FILE)
+if _compiling and DEVICE == "NPU":  # compiled at this load: _prepare_npu must not do it again
+    open(_npu_ready("turbo-npu"), "w").write("ok")
 print(f"Whisper {os.path.basename(MODEL)} on {DEVICE}, language {LANG or 'auto'}", flush=True)
 whisper_lock = threading.Lock()  # hotkey recordings and the wake listener share one pipeline
 
