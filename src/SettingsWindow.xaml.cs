@@ -117,10 +117,10 @@ namespace ClawVoice
             TgLinkBtn.Click += async (_, _) => await TgLink();
             TgTestBtn.Click += async (_, _) =>
             {
-                if (Read()["telegram_chat_id"] is null) { Toast("Сначала привяжи бота: напиши ему /start и нажми «Привязать»", false); return; }
+                if (Read()["telegram_chat_id"] is null) { Toast("Сначала привяжите бота: напишите ему /start и нажмите «Привязать»", false); return; }
                 TgStatus.Text = "Отправляю…";
                 var r = await Task.Run(() => Stack.Cli("tg-test"));
-                TgStatus.Text = r["error"] is { } err ? "Не получилось: " + err : "Отправила, проверь Телеграм";
+                TgStatus.Text = r["error"] is { } err ? "Не получилось: " + err : "Отправлено, проверьте Телеграм";
                 Toast(TgStatus.Text, r["error"] is null);
             };
 
@@ -270,7 +270,7 @@ namespace ClawVoice
             bool listen = Stack.Listening;
             ListenTitle.Text = $"Откликаться на «{AssistantName()}»";
             ListenSwitch.IsChecked = listen;
-            ListenSub.Text = listen ? "Слушаю имя от сети, микрофон всегда открыт" : "Выключено, зови кнопкой";
+            ListenSub.Text = listen ? "Слушаю имя от сети, микрофон всегда открыт" : "Выключено, зовите кнопкой";
             string prov = (string?)(Read()["llm"] as JsonObject)?["provider"] ?? "none";
             bool npu = prov == "npu";
             // the switch only loads / unloads the local Gemma: with any other variant it would stay grey for nothing
@@ -280,7 +280,7 @@ namespace ClawVoice
             bool gemma = Stack.GemmaWanted;
             GemmaSwitch.IsChecked = npu && gemma;
             GemmaSub.Text = !npu ? (prov == "none" ? "Без модели: команды и ответы из интернета" : "Внешняя модель, настраивается на вкладке «Помощник»")
-                : App.GemmaLoaded ? "В памяти, около 3.8 ГБ. Выключи, чтобы освободить" : gemma ? "Загружается…" : "Выгружена: простые команды работают, разговор нет";
+                : App.GemmaLoaded ? "В памяти, около 3.8 ГБ. Выключите, чтобы освободить" : gemma ? "Загружается…" : "Выгружена: простые команды работают, разговор нет";
             StatusText.Text = "";
         }
 
@@ -331,7 +331,7 @@ namespace ClawVoice
             if (_capturing == null) { _captureTimer.Stop(); return; }
             double left = (_captureUntil - DateTime.Now).TotalSeconds;
             if (left <= 0) { StopCapture(); return; }
-            _capturing.Content = $"Нажми сочетание…  {Math.Ceiling(left):0}";
+            _capturing.Content = $"Нажмите сочетание…  {Math.Ceiling(left):0}";
         }
 
         void StopCapture()
@@ -359,7 +359,7 @@ namespace ClawVoice
         void CmdArgPlaceholder()
         {
             bool keys = CmdDo.SelectedIndex >= 0 && Actions[CmdDo.SelectedIndex].Arg == "keys";
-            CmdArgHint.Text = "Введи сочетание клавиш";
+            CmdArgHint.Text = "Введите сочетание клавиш";
             CmdArgHint.Visibility = keys && CmdArg.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -486,7 +486,7 @@ namespace ClawVoice
             if (!names.Contains(low)) names.Insert(0, low);
             Set("assistant_name", name);
             Set("wake_names", new JsonArray(names.Select(n => (JsonNode)n!).ToArray()));
-            NameHint.Text = $"Готово: зови «{name}, …». Чтобы узнавала лучше, нажми «Тренировать имя».";
+            NameHint.Text = $"Готово: зовите «{name}, …». Чтобы имя узнавалось лучше, нажмите «Тренировать имя».";
         }
 
         // ---------------- model page
@@ -544,7 +544,7 @@ namespace ClawVoice
         async Task GetGemma()
         {
             string token = HfTokenBox.Password.Trim();
-            if (token.Length == 0) { GemmaState.Text = "Вставь токен Hugging Face."; return; }
+            if (token.Length == 0) { GemmaState.Text = "Вставьте токен Hugging Face."; return; }
             GemmaGetBtn.IsEnabled = false;
             GemmaState.Text = "Скачиваю Gemma, 3.3 ГБ. Это может занять от нескольких минут до получаса, окно можно закрыть позже…";
             var progress = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -696,7 +696,7 @@ namespace ClawVoice
         {
             string token = TgTokenBox.Password.Trim(), chat = TgChatBox.Text.Trim();
             if (chat.Length > 0 && !long.TryParse(chat, out _)) { TgStatus.Text = "ID чата это число, например 123456789"; return; }
-            if (token.Length == 0 && chat.Length == 0) { TgStatus.Text = "Вставь токен бота от @BotFather"; return; }
+            if (token.Length == 0 && chat.Length == 0) { TgStatus.Text = "Вставьте токен бота от @BotFather"; return; }
             if (token.Length > 0 && token.Length < 20) { TgStatus.Text = "Это не похоже на токен бота от @BotFather"; return; }
             if (chat.Length > 0)  // a known chat id: nothing to wait for
             {
@@ -707,16 +707,16 @@ namespace ClawVoice
                     TgTokenBox.Password = "";
                 }
                 Set("telegram_chat_id", long.Parse(chat));
-                TgStatus.Text = $"Сохранено: чат {chat}. Нажми «Отправить проверку».";
+                TgStatus.Text = $"Сохранено: чат {chat}. Нажмите «Отправить проверку».";
                 Toast(TgStatus.Text, true);
                 return;
             }
-            TgStatus.Text = "Жду твоё сообщение боту (до 20 секунд): напиши ему /start или что угодно…";
+            TgStatus.Text = "Жду сообщение боту (до 20 секунд): напишите ему /start или что угодно…";
             var r = await Task.Run(() => Stack.Cli("tg-link " + Stack.Quote(token)));
             TgTokenBox.Password = "";
             if (r["chat_id"] is { } id) TgChatBox.Text = id.ToString();
             TgStatus.Text = r["error"] is { } err ? "Не получилось: " + err
-                : r["chat_id"] is null ? "Токен сохранён, но сообщения боту не пришло. Напиши ему что угодно и нажми «Привязать» ещё раз, или впиши ID чата вручную."
+                : r["chat_id"] is null ? "Токен сохранён, но сообщения боту не пришло. Напишите ему что угодно и нажмите «Привязать» ещё раз или впишите ID чата вручную."
                 : $"Привязано: {r["name"]} (чат {r["chat_id"]}). ID можно скопировать из поля.";
             Toast(TgStatus.Text, r["error"] is null && r["chat_id"] is not null);
         }
@@ -773,7 +773,7 @@ namespace ClawVoice
         void CmdSave()
         {
             int i = CmdList.SelectedIndex;
-            if (i < 0 || CmdDo.SelectedIndex < 0) { CmdStatus.Text = "Выбери команду слева или создай новую"; return; }
+            if (i < 0 || CmdDo.SelectedIndex < 0) { CmdStatus.Text = "Выберите команду слева или создайте новую"; return; }
             var phrases = CmdSay.Text.Split('\n').Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
             if (phrases.Length == 0) { CmdStatus.Text = "Нужна хотя бы одна фраза"; return; }
             var act = Actions[CmdDo.SelectedIndex];
@@ -940,7 +940,7 @@ namespace ClawVoice
                 row.Children.Add(texts);
                 var btn = new Button { Style = (Style)FindResource("Flat"), Height = 30, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
                                        Content = installed ? "Удалить" : "Скачать", IsEnabled = !_modelBusy && !active && preparing != key };
-                if (active) btn.ToolTip = "Сейчас используется: сначала выбери другую модель";
+                if (active) btn.ToolTip = "Сейчас используется: сначала выберите другую модель";
                 Grid.SetColumn(btn, 1);
                 _modelBtn[key] = btn;
                 string k = key, dir = (string?)mi["dir"] ?? "";
@@ -979,7 +979,7 @@ namespace ClawVoice
             progress.Stop();
             _modelBusy = false;
             bool ok = r["error"] is null;
-            ModelsStatus.Text = ok ? "Модель скачана." : $"Не скачалась: {r["error"]}. Возможно, для скачивания потребуется VPN. Повтори загрузку: скачанное не пропадёт.";
+            ModelsStatus.Text = ok ? "Модель скачана." : $"Не скачалась: {r["error"]}. Возможно, для скачивания потребуется VPN. Повторите загрузку: скачанное не пропадёт.";
             await FillModels();
             return ok;
         }
@@ -1066,7 +1066,7 @@ namespace ClawVoice
                 int n = (int?)info?["count"] ?? 0;
                 var names = (info?["names"] as JsonArray)?.Select(x => (string)x!).ToList() ?? new List<string>();
                 string sub = info == null ? "не удалось прочитать" : (bool?)info["exists"] == false ? "папка не найдена"
-                    : n == 0 ? "программ не нашлось" : $"{n} {Plural(n)}: {string.Join(", ", names.Take(6))}{(n > 6 ? "…" : "")}\nНажми, чтобы увидеть все";
+                    : n == 0 ? "программ не нашлось" : $"{n} {Plural(n)}: {string.Join(", ", names.Take(6))}{(n > 6 ? "…" : "")}\nНажмите, чтобы увидеть все";
                 var row = new Grid { Margin = new Thickness(0, 8, 0, 8) };
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -1131,7 +1131,7 @@ namespace ClawVoice
             }
             list.Add(dlg.FolderName);
             Set("app_folders", new JsonArray(list.Select(x => (JsonNode)x!).ToArray()));
-            AppFoldersStatus.Text = "Добавлено. Скажи «открой …» и название программы.";
+            AppFoldersStatus.Text = "Добавлено. Скажите «открой …» и название программы.";
             await FillAppFolders();
         }
 
@@ -1248,7 +1248,7 @@ namespace ClawVoice
                 _updatePage = newer ? page : "";
                 UpdateGetBtn.Visibility = newer ? Visibility.Visible : Visibility.Collapsed;
                 UpdateGetBtn.Content = $"Скачать SaySo {best}";
-                UpdateStatus.Text = newer ? $"Есть новая версия {best}. Скачай установщик и запусти поверх: настройки и модели сохранятся."
+                UpdateStatus.Text = newer ? $"Есть новая версия {best}. Скачайте установщик и запустите поверх: настройки и модели сохранятся."
                     : best.Major + best.Minor + best.Build == 0 ? "Выпусков на GitHub не нашлось" : $"Установлена последняя версия ({mine.ToString(3)})";
                 Toast(UpdateStatus.Text.Split('.')[0], true);
             }

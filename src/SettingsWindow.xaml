@@ -44,7 +44,7 @@
               <StackPanel>
                 <TextBlock Text="Установлена только диктовка" FontWeight="SemiBold"/>
                 <TextBlock Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,8"
-                           Text="Команды голосом, имя помощника, ответы голосом, Телеграм и плагины выключены. Кнопка ниже включает их сразу, языковая модель для разговора не обязательна."/>
+                           Text="Команды, имя помощника, ответы голосом, Телеграм и плагины выключены. Кнопка ниже включает их, языковая модель не обязательна."/>
                 <Button x:Name="EnableAssistantBtn" Content="Включить помощника" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White" HorizontalAlignment="Left"/>
               </StackPanel>
             </Border>
@@ -60,7 +60,7 @@
                   <StackPanel Margin="0,0,56,0">
                     <StackPanel Orientation="Horizontal">
                       <TextBlock Text="Диктовка и голосовые команды" FontWeight="SemiBold"/>
-                      <local:HelpTip Text="Главный выключатель SaySo. Держи кнопку диктовки и говори: текст появится там, где стоит курсор. Кнопка команды: нажми и скажи, что сделать. Выключено: кнопки не работают, модель распознавания выгружается из памяти. Нагрузка: распознавание работает, только пока ты говоришь, в покое почти ноль."/>
+                      <local:HelpTip Text="Главный выключатель SaySo. Держите кнопку диктовки и говорите: текст появится у курсора. Кнопка команды: нажмите и скажите, что сделать. Выключено: модель распознавания выгружается."/>
                     </StackPanel>
                     <TextBlock x:Name="DictationSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -71,7 +71,7 @@
                   <StackPanel Margin="0,0,56,0">
                     <StackPanel Orientation="Horizontal">
                       <TextBlock x:Name="ListenTitle" Text="Откликаться на имя" FontWeight="SemiBold"/>
-                      <local:HelpTip Text="Помощник слушает микрофон и откликается, когда фраза начинается с его имени: «Сэйсо, громкость сорок». Работает только от сети, от батареи выключается само. Нагрузка: микрофон всё время открыт, детектор речи берёт около 1% процессора, каждая услышанная фраза распознаётся."/>
+                      <local:HelpTip Text="Помощник откликается на фразу, которая начинается с его имени: «Сэйсо, громкость сорок». Только от сети. Микрофон всё время открыт, около 1% процессора."/>
                     </StackPanel>
                     <TextBlock x:Name="ListenSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -82,7 +82,7 @@
                   <StackPanel Margin="0,0,56,0">
                     <StackPanel Orientation="Horizontal">
                       <TextBlock x:Name="GemmaTitle" Text="Модель загружена" FontWeight="SemiBold"/>
-                      <local:HelpTip Text="Локальная Gemma 3 4B отвечает на свободные вопросы и разбирает необычные команды. Включена: около 3.8 ГБ оперативной памяти, NPU занят только во время ответа. Выключена: память свободна, простые команды и поиск в интернете работают без неё. Вариант модели выбирается на вкладке «Помощник»."/>
+                      <local:HelpTip Text="Gemma 3 4B на этом ПК: свободные вопросы и необычные команды. Пока загружена, занимает около 3.8 ГБ памяти. Простые команды работают и без неё."/>
                     </StackPanel>
                     <TextBlock x:Name="GemmaSub" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -97,7 +97,7 @@
                   <StackPanel Margin="0,0,56,0">
                     <StackPanel Orientation="Horizontal">
                       <TextBlock Text="Микрофон всегда готов от сети" FontWeight="SemiBold"/>
-                      <local:HelpTip Text="От сети микрофон не закрывается между командами: запись начинается сразу и захватывает 0.4 с до нажатия. От батареи он закрывается ради экономии, и на медленных микрофонах первое слово может потеряться. Нагрузка: почти никакой, но Windows всё время показывает значок микрофона."/>
+                      <local:HelpTip Text="От сети микрофон не закрывается: запись начинается сразу и захватывает 0.4 с до нажатия. От батареи он закрывается ради экономии."/>
                     </StackPanel>
                     <TextBlock Text="Быстрее отклик, пока включено слушание имени" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -108,7 +108,7 @@
                   <StackPanel Margin="0,0,56,0">
                     <StackPanel Orientation="Horizontal">
                       <TextBlock Text="Звуковой сигнал" FontWeight="SemiBold"/>
-                      <local:HelpTip Text="Короткий писк, когда запись началась (можно говорить), когда она закончилась и когда помощник ждёт следующую фразу. Выключи, если мешает: карточка на экране всё равно покажет, что идёт запись."/>
+                      <local:HelpTip Text="Писк в начале и в конце записи и когда помощник ждёт следующую фразу. Карточка на экране показывает запись и без него."/>
                     </StackPanel>
                     <TextBlock Text="Писк при нажатии кнопки и в конце записи" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -119,7 +119,7 @@
                   <StackPanel Margin="0,0,56,0">
                     <StackPanel Orientation="Horizontal">
                       <TextBlock Text="Журнал диктовки" FontWeight="SemiBold"/>
-                      <local:HelpTip Text="Файл dictate.log в папке программы: что распознано, какие команды выполнены, ошибки. Он помогает понять, почему что-то не сработало, и перезаписывается при каждом запуске диктовки. Выключи, если не хочешь, чтобы надиктованный текст оставался на диске: тогда в файл попадают только ошибки. Применяется после перезапуска диктовки, это делается само."/>
+                      <local:HelpTip Text="dictate.log в папке программы: что распознано и выполнено, ошибки. Помогает разобраться, если что-то не сработало. Выключено: в файл пишутся только ошибки."/>
                     </StackPanel>
                     <TextBlock Text="Распознанный текст и события в dictate.log" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -130,7 +130,7 @@
                   <StackPanel Margin="0,0,56,0">
                     <StackPanel Orientation="Horizontal">
                       <TextBlock Text="Запускать вместе с Windows" FontWeight="SemiBold"/>
-                      <local:HelpTip Text="SaySo стартует при входе в Windows и сам запускает диктовку (и Gemma, если она не выгружена). Выключено: запускай с ярлыка, когда нужно."/>
+                      <local:HelpTip Text="SaySo запускается при входе в Windows вместе с диктовкой. Выключено: запуск с ярлыка."/>
                     </StackPanel>
                     <TextBlock Text="Помощник, диктовка и модель (если не выгружена)" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -142,21 +142,21 @@
           <StackPanel Grid.Column="2">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="СОЧЕТАНИЯ КЛАВИШ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Диктовка: держи сочетание, пока говоришь, отпусти, и текст вставится в окно с курсором. Ошибся: так же скажи «удали», и последний кусок сотрётся; «удали слово», «удали предложение», «удали всё» тоже работают. Команда: нажми один раз и скажи фразу за несколько секунд. Сочетания работают поверх игр и не доходят до них. Кнопку на корпусе назначь в её утилите на то же сочетание. На MSI Claw с ClawTweaks это делает кнопка ниже: M1 станет диктовкой, M2 командой, в общем профиле ClawTweaks; если на кнопках уже что-то назначено, SaySo сначала спросит. Пока идёт игра, записать нельзя: кнопки попали бы в её профиль."/>
+              <local:HelpTip Text="Диктовку держат, пока говорите: текст вставится у курсора, «удали» стирает последний кусок. Команду нажимают один раз. Работают поверх игр. На MSI Claw с ClawTweaks кнопка ниже назначит их на M1 и M2."/>
             </StackPanel>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition/></Grid.ColumnDefinitions>
               <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="8"/><RowDefinition/></Grid.RowDefinitions>
               <TextBlock Text="Диктовка" VerticalAlignment="Center"/>
               <Button x:Name="HotkeyDictation" Grid.Column="1" Style="{StaticResource Flat}" Focusable="True"
-                      ToolTip="Нажми и затем нужное сочетание. Esc: отмена"/>
+                      ToolTip="Нажмите и затем нужное сочетание. Esc: отмена"/>
               <TextBlock Grid.Row="2" Text="Команда" VerticalAlignment="Center"/>
               <Button x:Name="HotkeyGemma" Grid.Row="2" Grid.Column="1" Style="{StaticResource Flat}" Focusable="True"
-                      ToolTip="Нажми и затем нужное сочетание. Esc: отмена"/>
+                      ToolTip="Нажмите и затем нужное сочетание. Esc: отмена"/>
             </Grid>
             <Grid Margin="0,6,0,0">
               <TextBlock x:Name="HotkeyHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,110,0"
-                         Text="Диктовку держат, команду нажимают. Кнопку на корпусе назначь на то же сочетание в её утилите."/>
+                         Text="Диктовку держат, команду нажимают. Кнопку на корпусе назначьте на то же сочетание в её утилите."/>
               <Button x:Name="HotkeyReset" Content="По умолчанию" Style="{StaticResource Flat}" Height="30" FontSize="12"
                       HorizontalAlignment="Right" VerticalAlignment="Top"/>
             </Grid>
@@ -178,7 +178,7 @@
             <StackPanel x:Name="NameSection">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ИМЯ ПОМОЩНИКА" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Слово, на которое откликается помощник, и так он себя называет. Лучше всего имя из 2-3 слогов, не похожее на частые слова. «Тренировать имя»: скажешь имя несколько раз, и SaySo запомнит, как распознаватель слышит именно твоё произношение. Пропусков становится меньше."/>
+              <local:HelpTip Text="На это слово откликается помощник, так он себя и называет. Лучше 2-3 слога, не похожие на частые слова. «Тренировать имя» учит распознавание вашему произношению."/>
             </StackPanel>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -187,14 +187,14 @@
             </Grid>
             <Grid Margin="0,6,0,0">
               <TextBlock x:Name="NameHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,120,0"
-                         Text="Зови по имени в начале фразы: «Сэйсо, громкость сорок»."/>
+                         Text="Зовите по имени в начале фразы: «Сэйсо, громкость сорок»."/>
               <Button x:Name="TrainBtn" Content="Тренировать имя" Style="{StaticResource Flat}" Height="30" FontSize="12"
                       HorizontalAlignment="Right" VerticalAlignment="Top"/>
             </Grid>
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ЯЗЫК" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Язык распознавания и ответов. «Авто»: распознаватель сам определяет язык каждой фразы, это чуть медленнее и на коротких фразах иногда ошибается. Применяется перезапуском диктовки, он занимает несколько секунд."/>
+              <local:HelpTip Text="Язык распознавания и ответов. «Авто» определяет язык каждой фразы, на коротких фразах иногда ошибается."/>
             </StackPanel>
             <Border Style="{StaticResource SegBox}">
               <UniformGrid Rows="1">
@@ -207,7 +207,7 @@
             <ComboBox x:Name="MicBox" Style="{StaticResource Combo}"/>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ОБРАБОТКА МИКРОФОНА" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Аппаратная: звук чистит сам драйвер микрофона, если умеет (Intel Smart Sound на MSI Claw убирает шум, музыку и голос помощника). Когда играет музыка, ошибок заметно меньше, процессор не нагружается. Если другая программа держит микрофон в том же режиме (например, открытая страница «Звук» в Параметрах), очистка слабеет. Обычная: звук как есть, для внешних микрофонов и гарнитур со своей обработкой."/>
+              <local:HelpTip Text="Аппаратная: шум и музыку убирает драйвер микрофона, если умеет (Intel Smart Sound на MSI Claw), под музыку ошибок меньше. Обычная: звук как есть, для внешних микрофонов и гарнитур."/>
             </StackPanel>
             <Border Style="{StaticResource SegBox}">
               <UniformGrid Rows="1">
@@ -220,12 +220,12 @@
                          Text="Аппаратная работает, если драйвер это умеет, иначе как обычная."/>
               <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
                 <Button x:Name="MicFxBtn" Content="Звук в Windows" Style="{StaticResource Flat}" Height="30" FontSize="12"/>
-                <local:HelpTip Text="Открывает свойства микрофона в Параметрах Windows. Там можно выключить «Улучшение звука»: тогда драйвер перестаёт убирать шум, музыку и голос помощника, аппаратная работает как обычная, и когда играет музыка, ошибок больше. Память это не освобождает. Звуковая служба Windows держит около 450 МБ всё время, пока микрофон открыт, с улучшением и без него. Микрофон открыт всё время, пока SaySo откликается на имя (от сети). Если имя выключить, микрофон открывается только на время нажатия кнопки, и эта память освобождается."/>
+                <local:HelpTip Text="Открывает свойства микрофона в Windows. Если там выключить «Улучшение звука», аппаратная обработка работает как обычная."/>
               </StackPanel>
             </Grid>
             <StackPanel x:Name="FollowLabel" Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="СЛУШАТЬ ПОСЛЕ ОТВЕТА" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Сколько секунд после ответа помощник ждёт следующую фразу без имени и без кнопки, как в разговоре. 0: не ждёт. Пока он слушает, музыка и видео звучат тише."/>
+              <local:HelpTip Text="Сколько секунд помощник ждёт следующую фразу без имени и кнопки. 0: не ждёт. Пока ждёт, музыка звучит тише."/>
             </StackPanel>
             <Grid x:Name="FollowRow">
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="60"/></Grid.ColumnDefinitions>
@@ -236,7 +236,7 @@
           <StackPanel x:Name="VoiceSection" Grid.Column="2">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ГОЛОС ОТВЕТОВ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Голоса Windows. По умолчанию для русского: Microsoft Irina. Другие голоса добавляются в Параметрах Windows: «Время и язык», «Речь». Скорость и громкость меняют только голос помощника, не общую громкость. Нагрузка: голос синтезирует Windows, это почти не нагружает процессор."/>
+              <local:HelpTip Text="Голоса Windows, новые добавляются в Параметрах: «Время и язык», «Речь». Скорость и громкость меняют только голос помощника."/>
             </StackPanel>
             <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4" Margin="0,0,0,12">
               <Grid Margin="0,8">
@@ -276,7 +276,7 @@
           <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ПОМОЩНИК И ЯЗЫКОВАЯ МОДЕЛЬ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Модель нужна для разговора и необычных команд. Без модели работают команды из «Что умеет», погода, поиск и Википедия, нагрузки нет. Локально: Gemma 3 4B прямо на этом ПК (NPU, видеокарта или процессор), 3.3 ГБ на диске и около 4 ГБ памяти, ничего не уходит в интернет. Свой сервер: Ollama, LM Studio и другие на этом или соседнем ПК, нагрузка там. Облако: Gemini и подобные, быстро и без нагрузки, но фразы для модели уходят в интернет, нужен ключ."/>
+              <local:HelpTip Text="Модель нужна для разговора и необычных команд, без неё работают команды из «Что умеет». Локально: Gemma на этом ПК, около 4 ГБ памяти. Свой сервер: Ollama, LM Studio. Облако: Gemini, нужен ключ."/>
             </StackPanel>
             <!-- what is saved and working now, apart from the choice below (which is only a draft until «Сохранить») -->
             <Border x:Name="ModelNowBox" CornerRadius="12" Padding="12,8" Margin="0,0,0,8" BorderThickness="1">
@@ -297,7 +297,7 @@
                 <StackPanel Margin="0,0,56,0">
                   <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Полностью офлайн" FontWeight="SemiBold"/>
-                    <local:HelpTip Text="Отключается: погода, курс валют, поиск и ответы из интернета, Википедия, облачная модель и модель на своём сервере (варианты «Облако» и «Свой сервер» становятся серыми, сохранённый выбор вернётся, когда офлайн выключишь). Остаётся: диктовка (речь всегда распознаётся на этом ПК), команды компьютера, свои команды и плагины, Телеграм (сообщения, скриншоты, файлы, напоминания), Gemma на этом ПК и проверка обновлений по кнопке. Если вдобавок выбрано «Без модели», SaySo работает только как команды: ничего не говорит голосом, а непонятную фразу или запрос в интернет показывает короткой карточкой."/>
+                    <local:HelpTip Text="Отключает погоду, поиск, Википедию, облако и свой сервер. Остаются диктовка, команды, плагины, Телеграм и Gemma на этом ПК. С «Без модели»: только команды, без голоса."/>
                   </StackPanel>
                   <TextBlock Text="Без погоды, поиска, Википедии, облака и своего сервера. Диктовка, команды и Телеграм работают" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
                 </StackPanel>
@@ -309,7 +309,7 @@
             <StackPanel x:Name="NpuFields" Visibility="Collapsed">
               <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
                 <TextBlock Text="ГДЕ ЗАПУСКАТЬ GEMMA" Style="{StaticResource Label}" Margin="0"/>
-                <local:HelpTip Text="NPU: экономно, видеокарта остаётся играм, около 3.8 ГБ памяти. Видеокарта: быстрее всего (короткий ответ за полсекунды), около 3.7 ГБ, но делит её с играми. Процессор: работает на любом ПК, но медленно (60 слов около 16 секунд) и берёт 4.6 ГБ памяти. Авто: NPU, если он есть, иначе видеокарта, иначе процессор. Смена перезагружает модель."/>
+                <local:HelpTip Text="NPU: экономно, видеокарта свободна для игр. Видеокарта: быстрее всего. Процессор: на любом ПК, но медленно. Около 4 ГБ памяти в любом случае."/>
               </StackPanel>
               <Border Style="{StaticResource SegBox}">
                 <UniformGrid Rows="1">
@@ -354,10 +354,10 @@
           <StackPanel>
           <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
             <TextBlock Text="СВОЙ БОТ В ТЕЛЕГРАМЕ" Style="{StaticResource Label}" Margin="0"/>
-            <local:HelpTip Text="По команде помощник присылает в твой личный бот скриншоты, файлы и ответы: «сделай скриншот и отправь в телеграм», «отправь это в телеграм». Бот твой собственный, сообщения идут только в твой чат. Токен хранится зашифрованным и читается только этим пользователем Windows."/>
+            <local:HelpTip Text="Помощник присылает в ваш личный бот скриншоты, файлы и ответы: «отправь это в телеграм». Токен хранится зашифрованным."/>
           </StackPanel>
           <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Sub}" FontSize="12" Margin="4,0,0,8"
-                     Text="1. Создай бота у @BotFather и скопируй токен.  2. Вставь токен ниже.  3. Впиши ID чата, если знаешь его. Если нет: напиши боту /start и нажми «Привязать», ID заполнится сам."/>
+                     Text="1. Создайте бота у @BotFather и скопируйте токен.  2. Вставьте токен ниже.  3. Впишите ID чата или напишите боту /start и нажмите «Привязать»."/>
           <TextBlock Text="ТОКЕН БОТА (ХРАНИТСЯ ЗАШИФРОВАННЫМ)" Style="{StaticResource Label}"/>
           <PasswordBox x:Name="TgTokenBox" Style="{StaticResource Secret}"/>
           <TextBlock Text="ID ЧАТА" Style="{StaticResource Label}"/>
@@ -383,7 +383,7 @@
               </TextBlock>
             </Border>
             <TextBlock Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"
-                       Text="Сообщения идут только в твой чат с твоим ботом. Команды из Телеграма помощник не принимает."/>
+                       Text="Сообщения идут только в ваш чат с вашим ботом. Команды из Телеграма помощник не принимает."/>
           </StackPanel>
         </Grid>
 
@@ -393,7 +393,7 @@
           <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="МОИ КОМАНДЫ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Свои фразы и что по ним делать: открыть сайт, программу или папку, нажать сочетание клавиш, напечатать текст, вызвать webhook или команду PowerShell (её помощник сначала покажет и спросит). Срабатывают раньше встроенных команд и без языковой модели. Звёздочка в фразе ловит любой хвост: «найди в ютубе *». «Проверить фразу» показывает, какая команда сработает."/>
+              <local:HelpTip Text="Свои фразы и действия: сайт, программа, папка, сочетание клавиш, текст, webhook или PowerShell (с подтверждением). Срабатывают раньше встроенных. «*» ловит любой хвост: «найди в ютубе *»."/>
             </StackPanel>
             <ListBox x:Name="CmdList" Style="{StaticResource Rows}" Height="250"/>
             <Grid Margin="0,8,0,0">
@@ -435,7 +435,7 @@
         <StackPanel x:Name="PagePlug" Visibility="Collapsed">
           <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
             <TextBlock Text="ПЛАГИНЫ" Style="{StaticResource Label}" Margin="0"/>
-            <local:HelpTip Text="Плагины добавляют команды для отдельных программ, например подсветку ClawAmbilight или настройки ClawTweaks. Плагин без своей программы просто молчит. Выключенный плагин не загружается и не слушает свои фразы."/>
+            <local:HelpTip Text="Команды для отдельных программ, например ClawAmbilight или ClawTweaks. Плагин без своей программы молчит, выключенный не загружается."/>
           </StackPanel>
           <ListBox x:Name="PlugList" Style="{StaticResource Rows}" Height="300"/>
           <Grid Margin="0,10,0,0">
@@ -451,7 +451,7 @@
           <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="МОДЕЛЬ РАСПОЗНАВАНИЯ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Быстрая (Whisper small, 244 МБ, около 0.8 ГБ памяти): хорошо в тишине, когда играет музыка, ошибается чаще. Точная (Whisper large-v3 turbo, 0.8 ГБ на видеокарте и процессоре, 1.6 ГБ для NPU; 1.3-2 ГБ памяти): почти без ошибок в тишине и заметно точнее, когда играет негромкая музыка; при громкой музыке ошибаются обе. Замер на MSI Claw 8 AI+, 16 с речи: быстрая 0.35 с на NPU, 0.8 с на видеокарте, 2.3 с на процессоре; точная 1.6 с на NPU, 0.5 с на видеокарте, 9.5 с на процессоре. Ошибок в тишине и когда играет музыка средней громкости: быстрая 7% и 21%, точная 0% и 4%. Обе модели работают на NPU, видеокарте и процессоре; точная на NPU в первый раз готовится около 6 минут, пока работает быстрая. Авто: точная на видеокарте без NPU, иначе быстрая. Нужной модели нет: она скачается."/>
+              <local:HelpTip Text="Быстрая: Whisper small, меньше памяти, под музыку ошибается чаще. Точная: Whisper turbo, почти без ошибок, на NPU в первый раз готовится около 6 минут. Замеры в инструкции."/>
             </StackPanel>
             <Border Style="{StaticResource SegBox}">
               <UniformGrid Rows="1">
@@ -462,7 +462,7 @@
             </Border>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ГДЕ РАСПОЗНАВАТЬ РЕЧЬ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="NPU: экономно, видеокарта остаётся играм. Видеокарта: быстрее всего, но делит её с играми. Процессор: работает на любом ПК, медленнее и нагружает ядра, пока идёт распознавание. Авто: NPU, если он есть, иначе видеокарта, иначе процессор. Смена перезапускает диктовку."/>
+              <local:HelpTip Text="NPU: экономно, видеокарта свободна для игр. Видеокарта: быстрее всего. Процессор: на любом ПК, но медленнее. Смена перезапускает диктовку."/>
             </StackPanel>
             <Border Style="{StaticResource SegBox}">
               <UniformGrid Rows="1">
@@ -478,7 +478,7 @@
           <StackPanel Grid.Column="2">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="СКАЧАННЫЕ МОДЕЛИ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Необязательные модели можно скачать и удалить, чтобы освободить диск. Ту модель, что сейчас распознаёт речь, удалить нельзя: сначала выбери другую выше. Точная модель для NPU при первом запуске готовится около 6 минут, всё это время работает быстрая. Gemma скачивается на вкладке «Помощник», нужен токен Hugging Face."/>
+              <local:HelpTip Text="Модели можно скачать и удалить. Ту, что сейчас распознаёт речь, удалить нельзя: сначала выберите другую. Gemma скачивается на вкладке «Помощник»."/>
             </StackPanel>
             <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
               <StackPanel x:Name="ModelRows"/>
@@ -493,7 +493,7 @@
           <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ПАПКИ С ПРОГРАММАМИ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Команды «открой …» и «закрой …» знают программы из меню «Пуск». Если программы или игры лежат просто в папке (портативные, игры вне Steam, папка с ярлыками), добавь эту папку здесь. Помощник найдёт в ней ярлыки и программы на два уровня вглубь: папка с одной программой называется по имени папки («Игры\Hades\Hades.exe» откроется по слову «Hades»). Установщики, удаление, отчёты об ошибках пропускаются. Список обновляется сразу и каждые 10 минут, или по команде «обнови список приложений». Нагрузка: короткий просмотр папки, без фоновой работы."/>
+              <local:HelpTip Text="«Открой …» знает программы из меню «Пуск». Добавьте папку с портативными программами или играми, и помощник найдёт их по имени."/>
             </StackPanel>
             <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
               <StackPanel x:Name="AppFolderRows"/>
@@ -520,7 +520,7 @@
             <TextBlock x:Name="MoreStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="О ПРОГРАММЕ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="«Проверить обновления» смотрит последний выпуск SaySo на GitHub. Если он новее, кнопка «Скачать» откроет страницу выпуска: скачай установщик и запусти поверх, настройки и модели сохранятся. Сам SaySo ничего не скачивает и не обновляет без тебя."/>
+              <local:HelpTip Text="Проверяет последний выпуск на GitHub. Новую версию запустите поверх старой, настройки и модели сохранятся. Без вас SaySo ничего не скачивает."/>
             </StackPanel>
             <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,10">
               <StackPanel>

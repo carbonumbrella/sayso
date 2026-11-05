@@ -96,7 +96,7 @@ namespace ClawVoice
                     break;
                 case 3:
                     _title.Text = "Микрофон";
-                    _text.Text = "Выбери микрофон и нажми «Проверить»: скажи любую фразу, и я покажу, что услышала.";
+                    _text.Text = "Выберите микрофон и нажмите «Проверить»: скажите любую фразу, и я покажу, что услышала.";
                     var box = new ComboBox { Style = S("Combo") };
                     var heard = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 10, 0, 0) };
                     var test = new Button { Content = "Проверить", Style = S("Flat"), Margin = new Thickness(0, 10, 0, 0) };
@@ -124,7 +124,7 @@ namespace ClawVoice
                             r = await Record(4, s => heard.Text = s);
                         }
                         test.IsEnabled = true;
-                        heard.Text = r.StartsWith("!") ? "Не получилось: " + r[1..] : r.Length == 0 ? "Ничего не услышала. Проверь микрофон"
+                        heard.Text = r.StartsWith("!") ? "Не получилось: " + r[1..] : r.Length == 0 ? "Ничего не услышала. Проверьте микрофон"
                                    : $"Услышала: «{r}»";
                     };
                     break;
@@ -133,9 +133,9 @@ namespace ClawVoice
                     string dict = SettingsWindow.HotkeyText((string?)s["hotkey_dictation"] ?? SettingsWindow.DefaultDictation),
                            cmd = SettingsWindow.HotkeyText((string?)s["hotkey_gemma"] ?? SettingsWindow.DefaultGemma);
                     _text.Text = !assistant
-                        ? $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. Ошибся: так же скажи «удали», и последний кусок сотрётся. Сочетание меняется в настройках."
-                        : $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. Ошибся: так же скажи «удали». " +
-                          $"Команда: нажми {cmd} и скажи, например, «громкость сорок». " +
+                        ? $"Диктовка: держите {dict}, говорите, отпустите: текст вставится у курсора. «Удали» стирает последний кусок. Сочетание меняется в настройках."
+                        : $"Диктовка: держите {dict}, говорите, отпустите: текст вставится у курсора, «удали» стирает последний кусок. " +
+                          $"Команда: нажмите {cmd} и скажите, например, «громкость сорок». " +
                           $"А ещё можно позвать по имени: «{name}, сколько времени?». Сочетания меняются в настройках.";
                     _body.Children.Add(new ClawButtonsPanel(wizard: true));  // MSI Claw with ClawTweaks: one press sets M1/M2
                     break;
@@ -152,7 +152,7 @@ namespace ClawVoice
                     var note = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(4, 8, 0, 0) };
                     note.SetResourceReference(TextBlock.ForegroundProperty, "Sub");
                     void Note(string code) => note.Text = code == "cloud"
-                        ? "Бесплатный ключ Gemini: нажми «Получить ключ», войди в Google-аккаунт, нажми «Create API key» и вставь ключ сюда."
+                        ? "Бесплатный ключ Gemini: нажмите «Получить ключ», войдите в Google-аккаунт, нажмите «Create API key» и вставьте ключ сюда."
                         : code == "npu" ? (gemma ? "Gemma уже скачана и будет работать на этом компьютере, без интернета."
                                                  : "Gemma скачивается потом в настройках, вкладка «Помощник». Нужен бесплатный аккаунт Hugging Face.")
                         : "Модель можно подключить позже на вкладке «Помощник».";
@@ -203,13 +203,13 @@ namespace ClawVoice
                     break;
                 case 4 when !assistant:
                     _title.Text = "Готово";
-                    _text.Text = $"Открой любое поле ввода, держи {SettingsWindow.HotkeyText((string?)s["hotkey_dictation"] ?? SettingsWindow.DefaultDictation)} и говори. " +
+                    _text.Text = $"Откройте любое поле ввода, держите {SettingsWindow.HotkeyText((string?)s["hotkey_dictation"] ?? SettingsWindow.DefaultDictation)} и говорите. " +
                                  "Голосовые команды и помощника можно включить потом в настройках.";
                     break;
                 case 4:
                     _title.Text = "Готово";
-                    _text.Text = $"Попробуй: «{name}, сколько времени?» или нажми {SettingsWindow.HotkeyText((string?)s["hotkey_gemma"] ?? SettingsWindow.DefaultGemma)} и скажи " +
-                                 "«что ты умеешь». Чтобы я лучше узнавала имя по твоему голосу, пройди короткую тренировку.";
+                    _text.Text = $"Попробуйте: «{name}, сколько времени?» или нажмите {SettingsWindow.HotkeyText((string?)s["hotkey_gemma"] ?? SettingsWindow.DefaultGemma)} и скажите " +
+                                 "«что ты умеешь». Чтобы я лучше узнавала имя по вашему голосу, пройдите короткую тренировку.";
                     var train = new Button { Content = "Тренировать имя", Style = S("Flat") };
                     train.Click += (_, _) => ((App)Application.Current).ShowTrainer();
                     _body.Children.Add(train);
@@ -236,11 +236,11 @@ namespace ClawVoice
                     var pong = udp.ReceiveAsync();
                     if (await Task.WhenAny(pong, Task.Delay(3000)) != pong) throw new SocketException((int)SocketError.ConnectionReset);
                     _ = pong.Result;  // surfaces a "connection reset" (nobody listens yet) as the exception below
-                    status("Говори…");
+                    status("Говорите…");
                     byte[] req = Encoding.UTF8.GetBytes($"{{\"cmd\":\"record\",\"sec\":{sec}}}");
                     await udp.SendAsync(req, req.Length, new IPEndPoint(IPAddress.Loopback, 47323));
                     var recv = udp.ReceiveAsync();
-                    if (await Task.WhenAny(recv, Task.Delay(sec * 1000 + 15000)) != recv) return "!диктовка ещё запускается, попробуй через минуту";
+                    if (await Task.WhenAny(recv, Task.Delay(sec * 1000 + 15000)) != recv) return "!диктовка ещё запускается, попробуйте через минуту";
                     var j = JsonNode.Parse(Encoding.UTF8.GetString(recv.Result.Buffer))!;
                     return j["error"] is { } e ? "!" + e : ((string?)j["text"] ?? "").Trim();
                 }

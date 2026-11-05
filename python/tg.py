@@ -13,7 +13,7 @@ def configured():
 def _call(method, data=None, files=None, token=None, timeout=30):
     token = token or voice_settings.secret("telegram_token")
     if not token:
-        raise RuntimeError("Телеграм не настроен: добавь токен бота в настройках")
+        raise RuntimeError("Телеграм не настроен: нужен токен бота в настройках")
     url = API.format(token=token, method=method)
     if files:
         boundary = uuid.uuid4().hex
@@ -43,7 +43,7 @@ def _call(method, data=None, files=None, token=None, timeout=30):
         if e.code == 409:
             raise RuntimeError("этого бота уже читает другая программа (webhook или второй SaySo): отключи её")
         if "chat not found" in desc or "chat_id is empty" in desc:
-            raise RuntimeError("бот не знает твой чат: напиши ему /start и нажми «Привязать»")
+            raise RuntimeError("бот не знает чат: нужно написать ему /start и нажать «Привязать»")
         raise RuntimeError(f"Телеграм ответил ошибкой {e.code}: {desc or e.reason}")
     if not res.get("ok"):
         raise RuntimeError(f"Телеграм: {res.get('description', res)}")
@@ -52,7 +52,7 @@ def _call(method, data=None, files=None, token=None, timeout=30):
 
 def send_message(text):
     if not voice_settings.get("telegram_chat_id"):
-        raise RuntimeError("бот ещё не привязан: напиши ему /start и нажми «Привязать»")
+        raise RuntimeError("бот ещё не привязан: нужно написать ему /start и нажать «Привязать»")
     _call("sendMessage", {"chat_id": voice_settings.get("telegram_chat_id"), "text": text[:4000]})
 
 

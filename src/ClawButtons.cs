@@ -47,7 +47,7 @@ namespace ClawVoice
             var tip = new HelpTip { Text = "Когда создаёшь в ClawTweaks профиль игры, на вкладке «Геймпад» для неё автоматически появляется " +
                 "отдельный профиль геймпада, и M1 и M2 в нём пустые: в этой игре кнопки диктовки и команды не работают. " +
                 "Если переключатель включён, SaySo при запуске игры записывает M1 и M2 в её профиль геймпада, и в новый, и в созданный раньше. " +
-                "Только если обе кнопки там пустые: назначенные ты сам не трогает. Если выключен, назначь M1 и M2 в профиле " +
+                "Только если обе кнопки там пустые, назначенные не трогает. Если выключен, назначьте M1 и M2 в профиле " +
                 "геймпада игры или удали этот профиль геймпада: тогда в игре действуют кнопки общего профиля." };
             var head = new StackPanel { Orientation = Orientation.Horizontal };
             head.Children.Add(title); head.Children.Add(tip);
@@ -100,7 +100,7 @@ namespace ClawVoice
             string games = _wizard ? " и в пустые профили геймпада игр" : "";
             if (!reachable)
             {
-                Say("ClawTweaks не отвечает: открой его один раз, потом здесь можно будет настроить задние кнопки.", "Sub");
+                Say("ClawTweaks не отвечает: откройте его один раз, потом здесь можно будет настроить задние кнопки.", "Sub");
                 _set.Visibility = Visibility.Collapsed;
             }
             else if ((bool?)_state["same"] == true)
@@ -132,7 +132,7 @@ namespace ClawVoice
             }
             if (_wizard && (bool?)r["ok"] == true) SettingsWindow.Set("claw_buttons_auto", true);  // the wizard's "yes" covers new games too
             await Refresh();
-            if ((bool?)r["ok"] != true) Say("ClawTweaks принял запись, но кнопки не совпали. Проверь их в ClawTweaks.", "Danger");
+            if ((bool?)r["ok"] != true) Say("ClawTweaks принял запись, но кнопки не совпали. Проверьте их в ClawTweaks.", "Danger");
         }
     }
 }

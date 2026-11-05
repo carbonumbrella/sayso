@@ -73,7 +73,7 @@ namespace ClawVoice
             _prompt.Text = "Около минуты";
             _hint.Text = $"Я буду показывать фразы. После сигнала читай их вслух обычным голосом, у каждой есть 3 секунды. " +
                          $"Почти все фразы с именем: так я узнаю, как распознаётся «{name}». Если помощника часто зовёшь " +
-                         "когда играет музыка или идёт игра, включи их и в этот раз: варианты из разных прогонов складываются. Диктовка должна быть включена.";
+                         "когда играет музыка или идёт игра, включите их и в этот раз: варианты из разных прогонов складываются. Диктовка должна быть включена.";
         }
 
         static string Name() => (string?)SettingsWindow.Read()["assistant_name"] ?? "Сэйсо";
@@ -104,13 +104,13 @@ namespace ClawVoice
             {
                 if (!_running) return;
                 step++;
-                _title.Text = positive ? $"Скажи имя ({step} из {total})" : $"Прочитай фразу ({step} из {total})";
+                _title.Text = positive ? $"Скажите имя ({step} из {total})" : $"Прочитайте фразу ({step} из {total})";
                 _prompt.Text = "«" + phrase + "»";
                 _hint.Text = "Приготовься…";
                 await Task.Delay(1200);
                 if (!_running) return;
                 Beep();
-                _hint.Text = "Говори";
+                _hint.Text = "Говорите";
                 var rec = Record();
                 var t0 = DateTime.Now;
                 while (!rec.IsCompleted)
@@ -122,7 +122,7 @@ namespace ClawVoice
                 string heard = rec.Result;
                 if (heard.StartsWith("!"))
                 {
-                    _hint.Text = "Не получилось записать: " + heard[1..] + ". Проверь, что диктовка включена.";
+                    _hint.Text = "Не получилось записать: " + heard[1..] + ". Проверьте, что диктовка включена.";
                     _running = false; _start.IsEnabled = true; _start.Content = "Заново";
                     return;
                 }
@@ -215,8 +215,8 @@ namespace ClawVoice
             _prompt.Text = _variants.Count > 0 ? "Узнаю имя так: " + string.Join(", ", _variants.Take(6)) : "Имя не распознано";
             _hint.Text = $"Имя распознано в {recognized} из {_pos.Count} попыток." +
                          (bad.Count > 0 ? $" Убрала варианты, похожие на обычную речь: {string.Join(", ", bad)}." : "") +
-                         (recognized < _pos.Count / 2 ? " Если узнаёт плохо, выбери имя, которое легче расслышать." : "") +
-                         " Нажми «Сохранить».";
+                         (recognized < _pos.Count / 2 ? " Если узнаёт плохо, выберите имя, которое легче расслышать." : "") +
+                         " Нажмите «Сохранить».";
             _save.IsEnabled = _variants.Count > 0;
             _start.IsEnabled = true; _start.Content = "Ещё раз";
         }

@@ -95,14 +95,14 @@ def remove(key):
         if not d:
             return {"ok": True}
         if voice_settings.get("llm").get("provider") == "npu":
-            raise RuntimeError("Gemma выбрана на вкладке «Помощник»: сначала выбери там другой вариант")
+            raise RuntimeError("Gemma выбрана на вкладке «Помощник»: сначала выберите там другой вариант")
         shutil.rmtree(d)
         return {"ok": True}
     if key not in voice_settings.WHISPER:
         raise RuntimeError(f"unknown model {key!r}")
     d = voice_settings.whisper_dir(key)
     if os.path.basename(d) == active_model():
-        raise RuntimeError("эта модель сейчас распознаёт речь: сначала выбери другую")
+        raise RuntimeError("эта модель сейчас распознаёт речь: сначала выберите другую")
     if os.path.isdir(d):
         shutil.rmtree(d)
     cache = os.path.join(HERE, "npu_cache", os.path.basename(d))
@@ -116,7 +116,7 @@ def gemma_download(token):
     (the user accepted Google's license on the model page). The token is used once and not stored."""
     import importlib.util, subprocess
     if not token:
-        raise RuntimeError("вставь токен Hugging Face")
+        raise RuntimeError("вставьте токен Hugging Face")
     if not all(importlib.util.find_spec(m) for m in ("fastapi", "uvicorn", "pydantic")):
         req = os.path.join(HERE, "requirements-npu.txt")
         r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", req],
@@ -128,12 +128,12 @@ def gemma_download(token):
         snapshot_watched(voice_settings.GEMMA_REPO, dest, "gemma", 3300, token=token)  # resumes a partial download
     except FetchError as e:
         if e.kind == "GatedRepoError":  # (also what a wrong token gets: the gated files answer 401 as "no access")
-            raise RuntimeError("нет доступа: проверь токен и прими лицензию Gemma на странице модели тем же аккаунтом")
+            raise RuntimeError("нет доступа: проверьте токен и примите лицензию Gemma на странице модели тем же аккаунтом")
         if e.status == 401:
             raise RuntimeError("токен не подошёл")
         raise
     if not voice_settings.gemma_dir():
-        raise RuntimeError("модель скачалась не полностью, запусти загрузку ещё раз")
+        raise RuntimeError("модель скачалась не полностью, запустите загрузку ещё раз")
     return {"model": dest}
 
 
@@ -189,7 +189,7 @@ PROGRESS_FILE = os.path.join(HERE, "download_progress.json")  # read by the inst
 
 
 SLOW = ("модель качается слишком медленно: huggingface.co почти не отдаёт файлы. Возможно, для скачивания "
-        "потребуется VPN. Запусти загрузку ещё раз, скачанное сохранится")
+        "потребуется VPN. Запустите загрузку ещё раз, скачанное сохранится")
 
 
 def snapshot_watched(repo, dest, key="", total_mb=0, token=None, window=90, min_rate=30_000):
@@ -333,7 +333,7 @@ def main(argv):
             if g.provider() == "none":
                 return out({"error": "выбрано «Без модели»"})
             if not g.gemma_on():
-                return out({"error": "Gemma выгружена: включи её на вкладке «Основное»"})
+                return out({"error": "Gemma выгружена: включите её на вкладке «Основное»"})
             t0 = time.time()
             body = {"messages": [{"role": "user", "content": "Ответь одним словом: работает"}], "max_tokens": 10,
                     "temperature": 0}

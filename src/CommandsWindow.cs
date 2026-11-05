@@ -38,7 +38,7 @@ namespace ClawVoice
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
             var title = new TextBlock { Text = "Что умеет SaySo", FontSize = 22, FontWeight = FontWeights.SemiBold };
-            var sub = new TextBlock { Text = "Скажи фразу после кнопки команды или по имени. Точные слова не важны: «сделай потише» тоже сработает.",
+            var sub = new TextBlock { Text = "Скажите фразу после кнопки команды или по имени. Точные слова не важны: «сделай потише» тоже сработает.",
                                       TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0), FontSize = 13 };
             sub.SetResourceReference(TextBlock.ForegroundProperty, "Sub");
             var heading = new StackPanel { Margin = new Thickness(0, 0, 12, 0) };

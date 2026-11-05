@@ -194,13 +194,13 @@ namespace ClawVoice
             {
                 if (!Stack.PythonHealthy())  // starting it would only pop the launcher's error box again and again
                 {
-                    _status = "Установка повреждена: запусти установщик SaySo ещё раз";
+                    _status = "Установка повреждена: запустите установщик SaySo ещё раз";
                     if (!_brokenShown)
                     {
                         _brokenShown = true;
                         Log.Write("the app's Python is broken: nothing started");
                         Dispatcher.Invoke(() => _tray.ShowBalloonTip(15000, "SaySo",
-                            "Установка повреждена. Запусти установщик SaySo ещё раз, он всё починит.", Forms.ToolTipIcon.Error));
+                            "Установка повреждена. Запустите установщик SaySo ещё раз, он всё починит.", Forms.ToolTipIcon.Error));
                     }
                     return;
                 }

@@ -113,9 +113,9 @@ def write():
     a game runs: ClawTweaks saves into the current profile, and during a game that is the game's own one."""
     st = state()
     if not st.get("reachable"):
-        return {"error": "ClawTweaks не отвечает: открой его один раз и повтори"}
+        return {"error": "ClawTweaks не отвечает: откройте его один раз и повторите"}
     if st["game"]:
-        return {"error": f"Сейчас запущена игра ({st['game']}): закрой её, иначе кнопки попадут в её профиль"}
+        return {"error": f"Сейчас запущена игра ({st['game']}): закройте её, иначе кнопки попадут в её профиль"}
     import _claw_ipc as c
     for fn, button in ((CLAW_M1, "M1"), (CLAW_M2, "M2")):
         keys = hid_keys(st["want"][button])

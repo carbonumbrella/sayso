@@ -348,7 +348,7 @@ def mic_failed(e, where="mic"):
     """A mic that does not open must not kill dictation: log it, show why on the card, the caller gives up."""
     print(f"{where} unavailable: {e}", flush=True)
     ov("info", "Доступ к микрофону выключен: Параметры Windows, Конфиденциальность, Микрофон." if mic_denied()
-       else "Микрофон не открылся: проверь, что он подключён и выбран в настройках SaySo (вкладка «Голос»).",
+       else "Микрофон не открылся: он подключён и выбран в настройках SaySo (вкладка «Голос»)?",
        "Микрофон", 8000)
 
 

@@ -129,7 +129,7 @@ var
 begin
   WizardForm.SelectDirBrowseLabel.Caption := 'Сюда же установщик скачает Python и модель распознавания: от 1.5 до 3 ГБ, ' +
     'с языковой моделью Gemma ещё 3.3 ГБ. Папка должна быть доступна без прав администратора: Program Files не подойдёт. ' +
-    'Настройки хранятся отдельно, в %APPDATA%\SaySo. Нажми «Далее», чтобы продолжить, или «Обзор», чтобы выбрать другую папку.';
+    'Настройки хранятся отдельно, в %APPDATA%\SaySo. Нажмите «Далее», чтобы продолжить, или «Обзор», чтобы выбрать другую папку.';
   DownloadPage := CreateDownloadPage('Загрузка .NET 10', 'Для работы нужна среда .NET 10 Desktop Runtime от Microsoft.', nil);
   SetupPage := CreateInputOptionPage(wpSelectTasks, 'Тип установки', 'Что установить?',
     'Распознавание речи работает на этом компьютере в обоих вариантах. Помощника можно включить и позже, в настройках. ' +
@@ -169,7 +169,7 @@ begin
        (Pos(Lowercase(AddBackslash(ExpandConstant('{commonpf32}'))), Dir) = 1) or
        (Pos(Lowercase(AddBackslash(ExpandConstant('{win}'))), Dir) = 1) then
     begin
-      MsgBox('В эту папку нельзя установить без прав администратора. Выбери папку в своём профиле или на другом диске, ' +
+      MsgBox('В эту папку нельзя установить без прав администратора. Выберите папку в своём профиле или на другом диске, ' +
              'например D:\SaySo.', mbError, MB_OK);
       Result := False;
       Exit;
@@ -313,7 +313,7 @@ begin
   if RunBootstrap(Setup) <> 0 then
     SuppressibleMsgBox('Не получилось установить Python или скачать модель распознавания. Подробности: ' +
            ExpandConstant('{app}\bootstrap.log') + '. Модель скачивается с huggingface.co, возможно, для скачивания ' +
-           'потребуется VPN. Потом запусти установку ещё раз, готовые шаги пропустятся.',
+           'потребуется VPN. Потом запустите установку ещё раз, готовые шаги пропустятся.',
            mbError, MB_OK, IDOK);  // suppressible: a silent install (/SUPPRESSMSGBOXES) must not pop up a box
   // a silent update over a running SaySo keeps the elevated task from the first install: no UAC box each update
   if WizardIsTaskSelected('hotkeys') and not (WizardSilent and WasRunning) then

@@ -44,7 +44,7 @@ namespace ClawVoice
         /// <summary>Runs sayso_cli.py and returns its JSON answer ({"error": ...} on failure).</summary>
         public static System.Text.Json.Nodes.JsonObject Cli(string args, string? stdin = null, int timeoutMs = 60000)
         {
-            if (!PythonHealthy()) return new System.Text.Json.Nodes.JsonObject { ["error"] = "установка повреждена, запусти установщик ещё раз" };
+            if (!PythonHealthy()) return new System.Text.Json.Nodes.JsonObject { ["error"] = "установка повреждена, запустите установщик ещё раз" };
             try
             {
                 var psi = new ProcessStartInfo(Python, $"\"{Path.Combine(Dir, "sayso_cli.py")}\" {args}")
