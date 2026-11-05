@@ -212,8 +212,14 @@ def _say_one_speaker(text, after=False):
         gen = tts_player.PLAYER.gen
 
 
+def aloud():
+    """The one rule for the voice: the "Отвечать голосом" switch (speak_answers, on by default), and never in the
+    "commands only" setup (offline, no model). Everything that speaks goes through report() / speak() / speak_now()."""
+    return voice_settings.get("speak_answers") is not False and not bare()
+
+
 def speak(text):
-    if bare():  # timers and the other direct callers too
+    if not aloud():  # timers and the other direct callers too
         return
     if EARLY.pop("cut", False):  # "стоп" (or a button press) over the early first sentence: drop the rest too
         EARLY.pop("text", None)
@@ -277,9 +283,10 @@ def speech_ms(text):
 
 
 def report(text, ok=True, vocal=False):
-    vocal = vocal and not bare()  # "commands only" (offline, no model): answers on the card, never aloud
     log(("OK: " if ok else "FAIL: ") + text)
+    # an answer meant to be heard stays on the card as long as reading it takes, also when the voice is off
     notify(text, assistant_title() if ok else f"{assistant_title()}: ошибка", ms=speech_ms(text) if vocal else 0)
+    vocal = vocal and aloud()
     if vocal:
         speak(text)
 
@@ -1739,8 +1746,8 @@ NEED_NET = "Нужен интернет. Включён офлайн-режим"
 
 def bare():
     """"Полностью офлайн" with no model = commands only, chosen on purpose: no offers to load a model, no advice,
-    no network tries and no voice at all (the user: commands should just act). Unknown phrases get NO_COMMAND,
-    internet ones NEED_NET, every answer is a card only."""
+    no network tries and no voice at all (aloud(); the user: commands should just act). Unknown phrases get
+    NO_COMMAND, internet ones NEED_NET, every answer is a card only."""
     return bool(voice_settings.get("offline")) and not gemma_on()
 
 
@@ -1779,6 +1786,8 @@ def _speak_first(sentence):
 
 def speak_now(text):
     """Start the voice at once without touching EARLY (used for the early first sentence)."""
+    if not aloud():
+        return
     SPOKEN.update(text=text.lower(), t=time.time())
     _speak_pending.set()
 

@@ -40,6 +40,7 @@ namespace ClawVoice
             ListenSwitch.Click += (_, _) => Stack.Listening = ListenSwitch.IsChecked == true;
             WarmSwitch.Click += (_, _) => Set("warm_mic", WarmSwitch.IsChecked == true);
             BeepSwitch.Click += (_, _) => Set("beeps", BeepSwitch.IsChecked == true);
+            SpeakSwitch.Click += (_, _) => { Set("speak_answers", SpeakSwitch.IsChecked == true); SpeakGate(); };
             LogSwitch.Click += (_, _) =>
             {
                 Set("dictation_log", LogSwitch.IsChecked == true);
@@ -524,7 +525,7 @@ namespace ClawVoice
         {
             var hw = await Task.Run(() => Stack.Cli("hw"));
             var m = await Task.Run(() => Stack.Cli("models"));
-            _gemmaHere = (bool?)m["gemma"] == true;
+            _gemmaHere = (bool?)m["gemma"] == true; SpeakGate();
             LlmDevNpu.Visibility = (bool?)hw["npu"] == true ? Visibility.Visible : Visibility.Collapsed;
             string dev = (string?)Read()["llm_device"] ?? "auto";
             (dev == "NPU" ? LlmDevNpu : dev == "GPU" ? LlmDevGpu : dev == "CPU" ? LlmDevCpu : LlmDevAuto).IsChecked = true;
@@ -584,8 +585,29 @@ namespace ClawVoice
 
         /// <summary>The saved variant as a green "✓ Подключено: …" box (grey for "Без модели"), so the tab shows what
         /// works now, not only the draft choice of the segment.</summary>
+        /// <summary>"Отвечать голосом" (speak_answers): the voice controls are greyed while it is off. In the
+        /// commands-only setup (offline and no model in use: gemma_agent.bare) there is never a voice, the switch says so.</summary>
+        void SpeakGate()
+        {
+            var s = Read();
+            string prov = (string?)(s["llm"] as JsonObject)?["provider"] ?? "none";
+            bool commandsOnly = (bool?)s["offline"] == true && !(prov == "npu" && _gemmaHere && Stack.GemmaWanted);
+            bool on = !commandsOnly && (bool?)s["speak_answers"] != false;
+            SpeakSwitch.IsEnabled = !commandsOnly;
+            SpeakSwitch.IsChecked = on;
+            SpeakHint.Text = commandsOnly ? "Режим только команд (офлайн без модели): ответы без голоса"
+                           : on ? "Ответы читаются вслух" : "Ответы только на карточке";
+            foreach (var c in new Control[] { VoiceBox, VoiceTestBtn, RateSlider, VolumeSlider })
+            {
+                c.IsEnabled = on;
+                c.Opacity = on ? 1 : 0.45;  // the sliders' own template does not grey out
+            }
+            RateText.Opacity = VolumeText.Opacity = on ? 1 : 0.45;
+        }
+
         void ShowModelNow()
         {
+            SpeakGate();  // offline or the model just changed: commands-only may have started or ended
             var s = Read();
             var llm = s["llm"] as JsonObject ?? new JsonObject();
             string prov = (string?)llm["provider"] ?? "none", model = (string?)llm["model"] ?? "";

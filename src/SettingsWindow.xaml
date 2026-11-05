@@ -238,6 +238,18 @@
               <TextBlock Text="ГОЛОС ОТВЕТОВ" Style="{StaticResource Label}" Margin="0"/>
               <local:HelpTip Text="Голоса Windows. По умолчанию для русского: Microsoft Irina. Другие голоса добавляются в Параметрах Windows: «Время и язык», «Речь». Скорость и громкость меняют только голос помощника, не общую громкость. Нагрузка: голос синтезирует Windows, это почти не нагружает процессор."/>
             </StackPanel>
+            <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4" Margin="0,0,0,12">
+              <Grid Margin="0,8">
+                <StackPanel Margin="0,0,56,0">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Отвечать голосом" FontWeight="SemiBold"/>
+                    <local:HelpTip Text="Выключено: команды выполняются, ответы только на карточке, помощник ничего не говорит вслух. Звуковые сигналы записи и писк таймера остаются, у сигналов свой переключатель на вкладке «Основное». В режиме «Полностью офлайн» без модели голоса нет всегда: это режим только команд."/>
+                  </StackPanel>
+                  <TextBlock x:Name="SpeakHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="SpeakSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <ComboBox x:Name="VoiceBox" Style="{StaticResource Combo}"/>
