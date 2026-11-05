@@ -66,7 +66,9 @@ namespace ClawVoice
             {
                 if ((bool?)_state["free"] == true) { _ = Write(); return; }
                 var now = _state["now"] as JsonObject;
-                Say($"Сейчас на M1: {now?["M1"]}, на M2: {now?["M2"]}. Заменить на диктовку и команду SaySo?", "Fg");
+                Say((bool?)_state["one_button"] == true
+                    ? $"Сейчас на M1: {now?["M1"]}. Заменить на кнопку SaySo?"
+                    : $"Сейчас на M1: {now?["M1"]}, на M2: {now?["M2"]}. Заменить на диктовку и команду SaySo?", "Fg");
                 _set.Visibility = Visibility.Collapsed;
                 _ask.Visibility = Visibility.Visible;
             };
@@ -81,9 +83,13 @@ namespace ClawVoice
             _text.SetResourceReference(TextBlock.ForegroundProperty, brush);
         }
 
-        void AutoNote() => _autoNote.Text = _auto.IsChecked == true
-            ? "M1 и M2 попадут в пустые профили геймпада игр"
-            : "В профилях геймпада игр M1 и M2 останутся пустыми";
+        void AutoNote()
+        {
+            bool one = (bool?)_state["one_button"] == true;
+            _autoNote.Text = _auto.IsChecked == true
+                ? (one ? "M1 попадёт в пустые профили геймпада игр" : "M1 и M2 попадут в пустые профили геймпада игр")
+                : (one ? "В профилях геймпада игр M1 останется пустой" : "В профилях геймпада игр M1 и M2 останутся пустыми");
+        }
 
         /// <summary>Reads ClawTweaks again (after a hotkey change in Settings).</summary>
         public async Task Refresh()
@@ -93,6 +99,7 @@ namespace ClawVoice
             if ((bool?)_state["installed"] != true) { Visibility = Visibility.Collapsed; return; }
             Visibility = Visibility.Visible;
             var want = _state["want"] as JsonObject;
+            bool one = (bool?)_state["one_button"] == true;  // only M1: M2 is the user's again
             bool reachable = (bool?)_state["reachable"] == true;
             _autoRow.Visibility = reachable ? Visibility.Visible : Visibility.Collapsed;
             _auto.IsChecked = AutoOn;
@@ -105,14 +112,16 @@ namespace ClawVoice
             }
             else if ((bool?)_state["same"] == true)
             {
-                Say($"Задние кнопки в общем профиле ClawTweaks настроены: M1 диктовка ({Keys(want?["M1"])}), " +
-                    $"M2 команда ({Keys(want?["M2"])}).", "Sub");
+                Say(one ? $"Задняя кнопка M1 в общем профиле ClawTweaks настроена ({Keys(want?["M1"])}): коротко команда, удержание диктовка."
+                        : $"Задние кнопки в общем профиле ClawTweaks настроены: M1 диктовка ({Keys(want?["M1"])}), " +
+                          $"M2 команда ({Keys(want?["M2"])}).", "Sub");
                 _set.Visibility = Visibility.Collapsed;
             }
             else
             {
-                Say($"M1 станет диктовкой ({Keys(want?["M1"])}, держать), M2 командой ({Keys(want?["M2"])}). " +
-                    $"Кнопки запишутся в общий профиль ClawTweaks{games}.", "Sub");
+                Say((one ? $"M1 станет кнопкой SaySo ({Keys(want?["M1"])}): коротко команда, удержание диктовка. "
+                         : $"M1 станет диктовкой ({Keys(want?["M1"])}, держать), M2 командой ({Keys(want?["M2"])}). ") +
+                    $"Запишется в общий профиль ClawTweaks{games}.", "Sub");
                 _set.Visibility = Visibility.Visible;
             }
         }

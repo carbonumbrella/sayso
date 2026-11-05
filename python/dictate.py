@@ -300,6 +300,13 @@ def want_warm():
     return WARM_MIC and voice_settings.get("warm_mic") and on_ac() and listening  # listening off: the mic (tray icon) sleeps like on battery
 
 
+MIC_LINGER_SEC = 300  # after a press the mic stays open this long (battery too): waking it took ~1 s, the first word was lost
+
+
+def recently_used():
+    return time.time() - last_stop_time < MIC_LINGER_SEC
+
+
 def close_mic():
     global stream
     if stream is not None:
@@ -507,12 +514,12 @@ def ctrl_v():
 
 
 def paste(text):
-    old = None
-    try:
-        old = pyperclip.paste()
-    except Exception:
-        pass
-    pyperclip.copy(text)
+    """Ctrl+V through the clipboard, out of the Win+V history; the previous content (pictures and files too) comes
+    back after (clip.py)."""
+    import clip
+    old = clip.save()
+    if not clip.set_text(text):
+        pyperclip.copy(text)  # the clipboard was busy: the old way rather than losing the phrase
     time.sleep(0.05)
     ctrl_v()
     try:
@@ -520,8 +527,7 @@ def paste(text):
     except Exception:
         pass
     time.sleep(0.3)
-    if old is not None:
-        pyperclip.copy(old)
+    clip.restore(old)
 
 
 # On trailing silence Whisper appends subtitle credits from its training data ("Субтитры субтитров О.Мастеров",
@@ -854,6 +860,19 @@ def open_followup(sound=None):
     threading.Timer(sec + 0.3, end_followup).start()
 
 
+def quiet_after_command():
+    """A command that needs no next phrase is done: close the listening window the command button opened and bring
+    the sound back now, not when that window (the "mic" pill) runs out."""
+    global followup_until
+    if recording or barge:
+        return
+    followup_until = 0.0
+    if wake_listener is not None:
+        wake_listener.awaiting_until = 0.0
+    unduck()
+    ov("mic_off")
+
+
 def end_followup():
     if in_followup() or (wake_listener is not None and wake_listener.speech):
         return  # renewed, or a phrase is still being spoken: its command will open a new window
@@ -883,6 +902,7 @@ def agent():
             _agent = importlib.reload(_agent)
             _agent_mtime = _mtime(_agent)
     _agent.after_reply = open_followup  # set on every call: a reload creates a fresh module
+    _agent.after_quiet = quiet_after_command
     _agent.on_speaking = on_speaking
     return _agent
 
@@ -890,8 +910,28 @@ def agent():
 last_stop_time = 0
 
 
+ONE_TAP_SEC = 0.25  # one-button mode: a release before this is a tap (the command; a clicky key taps in ~0.1 s)
+tap_pending = False  # one-button press not yet known to be a hold: no beep so far ("Слушаю…" shows at once)
+
+
+def one_button():
+    """Setting one_button: the dictation key alone does both (tap = command, hold = dictation). Needs the assistant."""
+    return bool(_vs.get("one_button")) and _vs.assistant_on()
+
+
+def _hold_confirmed(sid):
+    """One-button mode: still held after ONE_TAP_SEC, so it is dictation: now the "speak" beep."""
+    global tap_pending
+    with lock:
+        if not recording or session != sid or not tap_pending:
+            return
+        tap_pending = False
+    beep(BEEP_START)
+    ov("listen", "Слушаю…", "Диктовка")
+
+
 def start(m="paste"):
-    global recording, chunks, session, mode
+    global recording, chunks, session, mode, tap_pending
     if m == "agent" and not _vs.assistant_on():  # dictation-only install: the command button has nothing to run
         ov("info", "Установлена только диктовка. Помощника включают в настройках SaySo", None, 4000)
         return
@@ -910,30 +950,45 @@ def start(m="paste"):
             chunks = list(preroll)  # warm mic: include the moment just before the press
         else:
             chunks = []
+            t_open = time.time()
             try:
                 open_mic()  # cold mic (battery): 0.1-2 s to wake
             except Exception as e:
                 return mic_failed(e)
-        beep(BEEP_START)  # after the mic is live, so the beep means "speak now"
+            print(f"cold mic opened in {time.time() - t_open:.2f}s", flush=True)  # the start of a phrase lost meanwhile
+        # one-button mode: recording starts now (nothing of the phrase is lost), but tap or hold is known only after
+        # ONE_TAP_SEC; the beep and the card wait for that (_hold_confirmed)
+        tap_pending = m == "paste" and one_button()
+        if not tap_pending:
+            beep(BEEP_START)  # after the mic is live, so the beep means "speak now"
+        # the card at once, also in the one-button mode: recording runs from the press, waiting for it lost words
+        # one-button press: the assistant's name until it is known (a tap turns into the command window, a hold into "Диктовка")
+        ov("listen", "Слушаю…", None if tap_pending or m == "agent" else "Диктовка")  # None: the assistant's name
         duck(MAX_SEC + 5)
         threading.Thread(target=lambda: agent().stop_speaking(), daemon=True).start()  # pressing talks over the voice
-        ov("listen", "Слушаю…", None if m == "agent" else "Диктовка")
         recording = True
         session += 1
         sid = session
+    if tap_pending:
+        threading.Timer(ONE_TAP_SEC, _hold_confirmed, args=(sid,)).start()
     threading.Timer(MAX_SEC, lambda: session == sid and stop()).start()
 
 
 def stop():
-    global recording, last_stop_time
+    global recording, last_stop_time, tap_pending
     with lock:
         if not recording:
             return
         last_stop_time = time.time()
         recording = False
-        if not want_warm():
+        tap = tap_pending  # released before ONE_TAP_SEC: the command, the bit of audio is dropped
+        tap_pending = False
+        if not want_warm() and not tap and not recently_used():  # (open for MIC_LINGER_SEC: manage_mic closes it)
             close_mic()
         audio = np.concatenate(chunks) if chunks else np.zeros(0, np.float32)
+    if tap:
+        start("agent")
+        return
     unduck()
     beep(BEEP_STOP)
     ov("think", "Распознаю…", None if mode == "agent" else "Диктовка")
@@ -967,7 +1022,7 @@ def manage_mic():
         with lock:
             if recording:
                 continue
-            warm, active = want_warm() or in_followup(15) or barge, stream is not None and stream.active
+            warm, active = want_warm() or in_followup(15) or barge or recently_used(), stream is not None and stream.active
             if last_err and time.time() - err_at < 60:  # no mic: try again once a minute, not every 5 s
                 continue
             try:

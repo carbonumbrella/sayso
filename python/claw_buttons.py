@@ -68,9 +68,16 @@ def claw_mapping_label(raw):
     return "не назначена" if not m.get("Type") else "другое действие"
 
 
+FN = {"M1": CLAW_M1, "M2": CLAW_M2}
+
+
 def want():
-    return {"M1": voice_settings.get("hotkey_dictation") or voice_settings.DEFAULTS["hotkey_dictation"],
-            "M2": voice_settings.get("hotkey_gemma") or voice_settings.DEFAULTS["hotkey_gemma"]}
+    """The buttons SaySo manages: M1 = dictation, M2 = command; in the one-button mode only M1 (tap = command), M2 is
+    the user's again."""
+    w = {"M1": voice_settings.get("hotkey_dictation") or voice_settings.DEFAULTS["hotkey_dictation"]}
+    if not voice_settings.get("one_button"):
+        w["M2"] = voice_settings.get("hotkey_gemma") or voice_settings.DEFAULTS["hotkey_gemma"]
+    return w
 
 
 def mapping(keys):
@@ -87,10 +94,9 @@ def state():
     want_ = want()
     if not c.installed():
         return {"installed": False, "want": want_}
-    m1, m2 = c.get(CLAW_M1), c.get(CLAW_M2)
-    if m1 is None or m2 is None:
+    raw = {b: c.get(FN[b]) for b in want_}
+    if any(v is None for v in raw.values()):
         return {"installed": True, "reachable": False, "want": want_}
-    raw = {"M1": m1, "M2": m2}
     now = {b: claw_mapping_label(r) for b, r in raw.items()}
 
     def same(b):  # the same keys in any order ("Win+Ctrl+Alt+W" = "Ctrl+Alt+Win+W")
@@ -101,7 +107,7 @@ def state():
         return m.get("Type") == 1 and sorted(m.get("KeyboardKeys") or []) == sorted(hid_keys(want_[b]) or [None])
 
     return {"installed": True, "reachable": True, "want": want_, "now": now,
-            "same": same("M1") and same("M2"),
+            "same": all(same(b) for b in raw), "one_button": "M2" not in want_,
             # "free": nothing else is on them, writing loses nothing; otherwise the UI asks first
             "free": all(now[b] == "не назначена" or same(b) for b in raw),
             "fw_keyboard": (c.get(CLAW_FW_KEYBOARD) or "").strip().lower() == "true",
@@ -117,7 +123,8 @@ def write():
     if st["game"]:
         return {"error": f"Сейчас запущена игра ({st['game']}): закройте её, иначе кнопки попадут в её профиль"}
     import _claw_ipc as c
-    for fn, button in ((CLAW_M1, "M1"), (CLAW_M2, "M2")):
+    for button in st["want"]:
+        fn = FN[button]
         keys = hid_keys(st["want"][button])
         if not keys:
             return {"error": f"{st['want'][button]}: эту комбинацию нельзя назначить на кнопку"}
@@ -171,12 +178,12 @@ _recent = {}  # exe -> time SaySo filled it
 
 def _write_ours(c):
     w = want()
-    keys = [hid_keys(w["M1"]), hid_keys(w["M2"])]
-    if not all(keys):
+    keys = {b: hid_keys(v) for b, v in w.items()}
+    if not all(keys.values()):
         return False
-    c.set_(CLAW_M1, mapping(keys[0]))
-    time.sleep(0.3)
-    c.set_(CLAW_M2, mapping(keys[1]))
+    for b, k in keys.items():
+        c.set_(FN[b], mapping(k))
+        time.sleep(0.3)
     return True
 
 
@@ -207,15 +214,16 @@ def fill_new_game_profiles(log=print):
     if not exe or exe not in games or (exe in seen and exe not in _recent):
         return ""
     name = game.get("name") or os.path.basename(exe)
-    m1, m2 = c.get(CLAW_M1), c.get(CLAW_M2)  # while the game runs: the values of its own gamepad profile
-    if m1 is None or m2 is None:
+    now = {b: c.get(FN[b]) for b in want()}  # while the game runs: the values of its own gamepad profile
+    if any(v is None for v in now.values()):
         return ""
+    blank = all(_blank(v) for v in now.values())
     if exe in _recent:  # the second, blank push of a fresh profile: ours again, quietly
-        if _blank(m1) and _blank(m2) and _write_ours(c):
+        if blank and _write_ours(c):
             log(f"claw buttons: M1/M2 wiped by ClawTweaks in {name}, put back")
         return ""
     filled = ""
-    if _blank(m1) and _blank(m2):
+    if blank:
         if _write_ours(c):
             filled = name
             _recent[exe] = time.time()

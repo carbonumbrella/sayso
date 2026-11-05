@@ -37,7 +37,8 @@ ECO = (r"\bэко\w*|\beco\b|энергосбереж|тих\w* режим|ре�
        r"минимальн\w* (?:мощн|режим|производительн)")
 MEDIUM = (r"средн\w* (?:режим|мощн|тдп|ти ?ди ?пи|производительн|уровен)|(?:режим|тдп|мощност\w*) средн|"
           r"баланс|сбалансир|обычн\w* режим|стандартн\w* режим")
-# "максимальная экономия": 8 W, CPU boost off, 48 Hz, an RTSS limit of 48 FPS, brightness 10 (the user's own set)
+# "максимальная экономия": 8 W, CPU boost off, 48 Hz, an RTSS limit of 48 FPS, brightness 10, Windows power mode
+# "best power efficiency" (the user's own set)
 MAX_SAVING = (r"максимальн\w* (?:эконом|энергосбереж)|макс\w* эконом|эконом\w* (?:по максимуму|на максимум)|"
               r"самый экономн|самая экономн|экономн\w* по максимуму")
 SAVING = {"tdp": 8, "hz": 48, "fps": 48, "brightness": 10}
@@ -226,6 +227,16 @@ def _saving_file():
     return os.path.join(A.voice_settings.USER_DIR, "claw_max_saving.json")
 
 
+# Windows power mode names for the reply; setting it is the agent's power_mode()
+POWER_MODES = {"961cc777-2547-4f9d-8174-7d86181b8a7a": "эффективность", "00000000-0000-0000-0000-000000000000": "баланс",
+               "ded574b5-45a0-4f42-8737-46345c09c238": "производительность"}
+EFFICIENCY = "961cc777-2547-4f9d-8174-7d86181b8a7a"
+
+
+def _power_mode(guid=None):
+    return A.power_mode(guid) if hasattr(A, "power_mode") else None
+
+
 def _brightness_now():
     rc, out = A._ps_out("(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightness).CurrentBrightness")
     return int(out) if rc == 0 and out.strip().isdigit() else None
@@ -242,7 +253,7 @@ def max_saving(p):
         if not os.path.exists(_saving_file()):
             before = {"boost": ct.get_bool(ct.TDP_BOOST), "tdp": ct.get_int(ct.TDP), "cpu_boost": ct.get_bool(ct.CPU_BOOST),
                       "pl2": ct.get_int(ct.TDP_BOOST_PL2), "hz": ct.get_int(ct.REFRESH_RATE),
-                      "fps": ct.get_int(ct.FPS_LIMIT, 0), "brightness": _brightness_now()}
+                      "fps": ct.get_int(ct.FPS_LIMIT, 0), "brightness": _brightness_now(), "power_mode": _power_mode()}
             with open(_saving_file(), "w", encoding="utf-8") as f:
                 json.dump(before, f)
     except Exception as e:
@@ -263,6 +274,8 @@ def max_saving(p):
         done.append(f"яркость {SAVING['brightness']}")
     except Exception as e:
         A.log(f"max saving: brightness failed: {e!r}")
+    if _power_mode(EFFICIENCY):
+        done.append("режим Windows: эффективность")
     if not done:
         return NO_ANSWER
     return "Максимальная экономия: " + ", ".join(done), False
@@ -296,6 +309,8 @@ def _saving_off():
             done.append(f"яркость {b['brightness']}")
         except Exception as e:
             A.log(f"max saving off: brightness failed: {e!r}")
+    if b.get("power_mode") and _power_mode(b["power_mode"]):
+        done.append(f"режим Windows: {POWER_MODES.get(b['power_mode'], 'прежний')}")
     if not done:
         return NO_ANSWER
     os.remove(_saving_file())
@@ -573,7 +588,7 @@ def register(api):
              "мышь или геймпад, оверлей и его позиция, лимит FPS, частота экрана, пауза или закрытие игры, "
              "режим Xbox, шумоподавление, датчики. what = просьба пользователя своими словами", tool)
     api.help("🎮 ClawTweaks: вентиляторы на максимум / как было · мощность 15 ватт, тдп 25 30 (PL1 и PL2), pl2 35, эко / средний / "
-             "высокая производительность / турбо режим · максимальная экономия (8 ватт, без буста, 48 герц и 48 кадров, яркость 10) / выключи максимальную экономию · буст вкл/выкл · береги батарею / заряжай до конца · режим мыши / геймпада · "
+             "высокая производительность / турбо режим · максимальная экономия (8 ватт, без буста, 48 герц и 48 кадров, яркость 10, режим Windows «эффективность») / выключи максимальную экономию · буст вкл/выкл · береги батарею / заряжай до конца · режим мыши / геймпада · "
              "покажи / убери фпс, оверлей слева внизу, подробный оверлей · ограничь фпс до 40 · частота экрана 60 · "
              "поставь игру на паузу / продолжи / закрой игру · режим Xbox · шумоподавление · "
              "температура процессора, сколько фпс, как там консоль")

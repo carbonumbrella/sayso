@@ -155,9 +155,12 @@ def parse_hotkey(text):
 
 
 def hotkeys():
-    """{id: (mods, vk, mode, label)} for RegisterHotKey; a broken value falls back to the default."""
+    """{id: (mods, vk, mode, label)} for RegisterHotKey; a broken value falls back to the default.
+    One-button mode (tap = command on the dictation key): the command key is not registered at all, so it (M2 on
+    the Claw) is free for other programs instead of still opening the command."""
     out = {}
-    for hid, key, mode in ((1, "hotkey_dictation", "paste"), (2, "hotkey_gemma", "agent")):
+    one = bool(get("one_button")) and assistant_on()
+    for hid, key, mode in ((1, "hotkey_dictation", "paste"),) + (() if one else ((2, "hotkey_gemma", "agent"),)):
         text = get(key)
         parsed = parse_hotkey(text)
         if not parsed:

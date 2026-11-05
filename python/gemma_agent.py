@@ -286,6 +286,8 @@ def report(text, ok=True, vocal=False):
     log(("OK: " if ok else "FAIL: ") + text)
     # an answer meant to be heard stays on the card as long as reading it takes, also when the voice is off
     notify(text, assistant_title() if ok else f"{assistant_title()}: ошибка", ms=speech_ms(text) if vocal else 0)
+    if vocal or text.rstrip().endswith("?"):  # information or a question: a follow-up may come (_finish)
+        CTX["follow"] = True
     vocal = vocal and aloud()
     if vocal:
         speak(text)
@@ -1363,6 +1365,48 @@ def xbox_mode(on):
     return ("Перехожу в режим Xbox" if on else "Перехожу в режим Windows"), False
 
 
+# Windows power mode (Settings, Power: "Режим питания"): the overlay scheme of the active power plan, no admin needed.
+# "Windows" must be in the phrase (or "режим питания"): ClawTweaks has its own "баланс" / "производительность" (TDP).
+# Whisper writes Windows as "виндовс", "виндус", "индус", "линдос" (heard on the user's Claw).
+POWER_MODES = [("961cc777-2547-4f9d-8174-7d86181b8a7a", "эффективность", r"эффективн|эконом|efficien"),
+               ("00000000-0000-0000-0000-000000000000", "баланс", r"баланс|сбалансир|balanc"),
+               ("ded574b5-45a0-4f42-8737-46345c09c238", "производительность", r"производительн|perform|перформанс|перфоманс")]
+WIN_WORD = r"windows|виндовс\w*|виндус\w*|\bвинд[аыуе]\b|индус\w*|линдос\w*|режим\w* питани"
+
+
+def power_mode(guid=None):
+    """The Windows power mode GUID now; with guid: set it and return it. None when this PC has no power modes."""
+    import uuid
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("b", ctypes.c_ubyte * 16)]
+    g = GUID()
+    try:
+        pp = ctypes.windll.powrprof
+        if guid is None:
+            return str(uuid.UUID(bytes_le=bytes(g.b))) if pp.PowerGetEffectiveOverlayScheme(ctypes.byref(g)) == 0 else None
+        ctypes.memmove(g.b, uuid.UUID(guid).bytes_le, 16)
+        return guid if pp.PowerSetActiveOverlayScheme(ctypes.byref(g)) == 0 else None
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def power_mode_route(p):
+    """"Windows эффективность / баланс / производительность", "режим питания …", "какой режим питания"."""
+    win = re.search(WIN_WORD, p)
+    if not win and not re.search(r"энергоэффективн", p):
+        return None
+    for guid, name, rx in POWER_MODES:
+        if re.search(rx, p):
+            return (f"Режим питания Windows: {name}", False) if power_mode(guid) else \
+                ("Режим питания Windows не переключился: на этом компьютере его нет", True)
+    if win and re.search(r"какой|какая|сейчас|текущ", p):
+        cur = power_mode()
+        name = next((n for g, n, _ in POWER_MODES if g == cur), None)
+        return (f"Режим питания Windows: {name}" if name else "Режим питания Windows не определяется"), True
+    return None
+
+
 def xbox_route(p):
     if re.search(TO_XBOX, p) and not re.search(r"приложени|\bапп?\b|app\b", p):  # "открой приложение Xbox" is an app
         return xbox_mode(True)
@@ -2238,7 +2282,9 @@ def edit_route(text, dictation=True):
             _key(0x11, 0x5A)  # Ctrl+Z undoes the last paste
             TYPED["buf"] = ""
         return "Стёрла"
-    if re.fullmatch(r"(?:очисти|очисти поле|удали вс\w|сотри вс\w|удали весь текст|сотри весь текст)", p):
+    # "удали всё" as Whisper writes it: "удалить все", "Смотри, всё" (сотри), "удалим всё" (punctuation is gone here)
+    if re.fullmatch(r"(?:очисти|очистить|очисти поле|(?:удали|удалить|удалите|удалим|удалей|удалил\w?|дили|сотри|стереть|"
+                    r"сотрите|стери|смотри|очисти|очистить|убери) (?:вс\w|весь текст|текст полностью|вс\w полностью))", p):
         if need():
             return need()
         _key(0x11, 0x41)
@@ -2324,17 +2370,16 @@ def edit_route(text, dictation=True):
 
 
 def _paste_text(text):
-    import pyperclip
-    try:
-        old = pyperclip.paste()
-    except Exception:
-        old = None
-    pyperclip.copy(text)
+    """"напиши …": like dictation, through the clipboard but out of the Win+V history (clip.py)."""
+    import clip
+    old = clip.save()
+    if not clip.set_text(text):
+        import pyperclip
+        pyperclip.copy(text)
     time.sleep(0.05)
     _key(0x11, 0x56)  # Ctrl+V by virtual keys: layout independent
     time.sleep(0.25)
-    if old is not None:
-        pyperclip.copy(old)
+    clip.restore(old)
     note_typed(text)
 
 
@@ -2387,6 +2432,7 @@ def typing_route(text, p):
 LAST = {"q": "", "a": "", "kind": "", "file": None, "query": "", "t": 0.0}  # the previous exchange
 CTX = {}            # filled by skills during one command: kind, file, query, end
 after_reply = None  # set by dictate.py: opens the 6 s follow-up listening window
+after_quiet = None  # set by dictate.py: no follow-up after this reply, the ducked speakers come back
 on_speaking = None  # set by dictate.py: on_speaking(True/False) around the voice (barge-in "стоп")
 LAST_TTL = 180      # follow-ups refer to answers younger than this
 
@@ -2400,9 +2446,9 @@ HELP_SHORT = ("Я управляю звуком и яркостью, откры�
               "валют, ставлю таймеры. Скажи: отправь список команд в телеграм")
 HELP_FILE = os.path.join(HERE, "commands.txt")  # shown by the SaySo tray menu ("Что умеет")
 HELP_FULL = """🎙 SaySo: голосовой помощник
-🎙 Как позвать: держите кнопку диктовки и говорите: текст напечатается у курсора · нажмите кнопку команды и скажите команду · или скажите «{name}, …» (от сети, когда включено слушание) · после ответа я ещё слушаю несколько секунд · «стоп» перебивает ответ
+🎙 Как позвать: держите кнопку диктовки и говорите: текст напечатается у курсора · нажмите кнопку команды и скажите команду · или скажите «{name}, …» (от сети, когда включено слушание) · после вопроса или ответа со сведениями я ещё слушаю несколько секунд · «стоп» перебивает ответ
 🔊 Звук и экран: громкость 40 · громче, тише · какая громкость / яркость · выключи / включи звук · яркость 70 · ночной свет вкл/выкл · микрофон вкл/выкл · пауза, следующий / предыдущий трек · экранная клавиатура · автоповорот экрана
-🖥 Окна и система: сверни окна · сверни / разверни / переключись на программу · полный экран (F11 в браузере, Alt+Enter в игре) · меню OptiScaler · заблокируй компьютер (экран блокировки) · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox · выключи, перезагрузи, усыпи (с подтверждением) · выключи компьютер через 10 минут · отмени выключение
+🖥 Окна и система: сверни окна · сверни / разверни / переключись на программу · полный экран (F11 в браузере, Alt+Enter в игре) · меню OptiScaler · заблокируй компьютер (экран блокировки) · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox · режим питания Windows: эффективность / баланс / производительность · выключи, перезагрузи, усыпи (с подтверждением) · выключи компьютер через 10 минут · отмени выключение
 📂 Программы и файлы: открой / закрой любую программу или игру · открой ютуб / гугл / почту / гитхаб · открой настройки блютуз / вайфай / звука / экрана … · настройки SaySo / подсветки / kbdhaptic · обнови список приложений · свои папки с программами и играми: настройки → «Ещё» · найди файл … (по всему диску) · открой / покажи / скопируй найденный файл
 ⌨️ Печать командой: напиши … · допиши … · с новой строки … · отправь (нажмёт Enter)
 ✏️ Правка голосом (кнопкой диктовки, фраза целиком): удали · удали слово / три слова · удали предложение · удали всё · замени … на … · новая строка · новый абзац · точка, запятая, вопрос · с большой / маленькой буквы · отмени, верни обратно · выдели / скопируй / вырежи всё · скопируй, вставь · в начало, в конец · отправить · «напиши удали» печатает само слово
@@ -2421,6 +2467,9 @@ HELP_FULL = """🎙 SaySo: голосовой помощник
 def help_full():
     name = voice_settings.get("assistant_name") or "Сэйсо"
     text = HELP_FULL.replace("{name}", name)
+    if voice_settings.get("one_button"):  # tap = command, hold = dictation on the same key
+        text = text.replace("держите кнопку диктовки и говорите: текст напечатается у курсора · нажмите кнопку команды и скажите команду",
+                            "держите кнопку и говорите: текст напечатается у курсора · коротко нажмите ту же кнопку и скажите команду")
     own = [c["say"][0].replace("*", "…").strip() for c in usercmd.items() if c.get("say")][:12]
     if own:  # the user's own phrases first, then where to add more
         text = text.replace("✍️ Свои команды: ", "✍️ Свои команды: " + " · ".join(own) + " · добавить свои: ")
@@ -2609,7 +2658,15 @@ def _finish(text, result):
     else:
         LAST.update(q=CTX.get("continued") or text, a=result or "", kind=CTX.get("kind", ""), file=CTX.get("file"),
                     query=CTX.get("query", ""), t=time.time())
-    if (after_reply is None or CTX.get("end")) and not _speak_pending.is_set():
+    # the "я ещё слушаю" window only where a next phrase is likely (user decision 2026-11-06): the assistant asked
+    # something, the answer was information (weather, rate, a question: "а завтра?", "подробнее"), a file was just
+    # found ("отправь его в телеграм"), or the conversation mode is on. After a plain action (volume, an app,
+    # ClawTweaks) it stays shut, and the ducked sound comes back at once.
+    follow = bool(CTX.get("follow") or CHAT["on"] or FOUND["t"] >= CTX.get("t0", time.time()))
+    end = bool(CTX.get("end"))
+    if (after_reply is None or end or not follow) and not _speak_pending.is_set():
+        if after_quiet is not None:
+            after_quiet()  # no window: the ducked speakers come back now, not on the 26 s safety timer
         return
 
     def run():  # open the follow-up window only after the voice has finished (no self-hearing)
@@ -2625,7 +2682,9 @@ def _finish(text, result):
         finally:
             if talking and on_speaking:
                 on_speaking(False)
-        if after_reply is None or CTX.get("end"):
+        if after_reply is None or end or not follow:
+            if after_quiet is not None:
+                after_quiet()
             return
         try:
             after_reply()
@@ -2642,6 +2701,9 @@ def command_route(p, text):
     # "найди файл клоу амбилайт": a file name may contain any plugin's word (that one turned the LEDs on)
     if re.search(r"\bфайл", p) and re.match(r"(?:а\s+)?(?:найди|найти|поищи|где|покажи)", p):
         return show_file(p)
+    pm = power_mode_route(p)  # ahead of Xbox and plugins: "Windows баланс" is not the ClawTweaks "баланс" (15 W)
+    if pm:
+        return pm
     xb = xbox_route(p)  # ahead of plugins: ClawTweaks' "режим Xbox" toggle needs its helper running
     if xb:
         return xb
@@ -2655,6 +2717,7 @@ def handle(text, dry=False):
     p = text.lower().strip(" .!?,")
     t0 = time.time()
     CTX.clear()
+    CTX["t0"] = t0  # a file found from here on opens the follow-up window (_finish)
     EARLY.clear()
     if not dry:
         try:

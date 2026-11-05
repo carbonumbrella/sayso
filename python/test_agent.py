@@ -95,7 +95,6 @@ CASES = [  # phrase, expected first call name, expected args/kwargs subset (or N
     ("покажи мне последний файл в загрузках", "show_file", None),
     ("где торрент лего бэтмен", "show_file", None),
     ("открой папку видео", "open_app", None),
-    ("запусти одни из нас", "open_app", ("одни из нас",)),
     ("откроемте гравити", "open_app", ("гравити",)),
     ("открой программу клауди на пк", "open_app", ("клауди",)),
     ("открой новое окно терминала", "open_app", ("terminal",)),

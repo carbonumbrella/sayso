@@ -132,12 +132,29 @@ namespace ClawVoice
                     _title.Text = "Кнопки";
                     string dict = SettingsWindow.HotkeyText((string?)s["hotkey_dictation"] ?? SettingsWindow.DefaultDictation),
                            cmd = SettingsWindow.HotkeyText((string?)s["hotkey_gemma"] ?? SettingsWindow.DefaultGemma);
+                    if (assistant && s["one_button"] is null) { SettingsWindow.Set("one_button", true); s = SettingsWindow.Read(); }  // first run: one key
+                    bool one = assistant && (bool?)s["one_button"] == true;
                     _text.Text = !assistant
                         ? $"Диктовка: держите {dict}, говорите, отпустите: текст вставится у курсора. «Удали» стирает последний кусок. Сочетание меняется в настройках."
+                        : one
+                        ? $"Одна кнопка {dict}. Коротко нажмите и скажите команду, например «громкость сорок». " +
+                          $"Держите, говорите, отпустите: текст вставится у курсора, «удали» стирает последний кусок. " +
+                          $"А ещё можно позвать по имени: «{name}, сколько времени?». Сочетание меняется в настройках."
                         : $"Диктовка: держите {dict}, говорите, отпустите: текст вставится у курсора, «удали» стирает последний кусок. " +
                           $"Команда: нажмите {cmd} и скажите, например, «громкость сорок». " +
                           $"А ещё можно позвать по имени: «{name}, сколько времени?». Сочетания меняются в настройках.";
-                    _body.Children.Add(new ClawButtonsPanel(wizard: true));  // MSI Claw with ClawTweaks: one press sets M1/M2
+                    if (assistant)
+                    {
+                        var keys = new UniformGrid { Rows = 1 };
+                        foreach (var (title, val) in new[] { ("Одна кнопка", true), ("Две кнопки", false) })
+                        {
+                            var rb = new RadioButton { Content = title, GroupName = "wkeys", Style = S("Seg"), IsChecked = one == val };
+                            rb.Click += (_, _) => { SettingsWindow.Set("one_button", val); Show(1); };
+                            keys.Children.Add(rb);
+                        }
+                        _body.Children.Add(new Border { Style = S("SegBox"), Child = keys });
+                    }
+                    _body.Children.Add(new ClawButtonsPanel(wizard: true));  // MSI Claw with ClawTweaks: one press sets M1 (and M2)
                     break;
                 case 2:
                     _title.Text = "Языковая модель (необязательно)";
@@ -208,7 +225,10 @@ namespace ClawVoice
                     break;
                 case 4:
                     _title.Text = "Готово";
-                    _text.Text = $"Попробуйте: «{name}, сколько времени?» или нажмите {SettingsWindow.HotkeyText((string?)s["hotkey_gemma"] ?? SettingsWindow.DefaultGemma)} и скажите " +
+                    string tap = (bool?)s["one_button"] == true
+                        ? "коротко нажмите " + SettingsWindow.HotkeyText((string?)s["hotkey_dictation"] ?? SettingsWindow.DefaultDictation)
+                        : "нажмите " + SettingsWindow.HotkeyText((string?)s["hotkey_gemma"] ?? SettingsWindow.DefaultGemma);
+                    _text.Text = $"Попробуйте: «{name}, сколько времени?» или {tap} и скажите " +
                                  "«что ты умеешь». Чтобы я лучше узнавала имя по вашему голосу, пройдите короткую тренировку.";
                     var train = new Button { Content = "Тренировать имя", Style = S("Flat") };
                     train.Click += (_, _) => ((App)Application.Current).ShowTrainer();

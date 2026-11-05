@@ -142,15 +142,22 @@
           <StackPanel Grid.Column="2">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="СОЧЕТАНИЯ КЛАВИШ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Диктовку держат, пока говорите: текст вставится у курсора, «удали» стирает последний кусок. Команду нажимают один раз. Работают поверх игр. На MSI Claw с ClawTweaks кнопка ниже назначит их на M1 и M2."/>
+              <local:HelpTip Text="Две кнопки: диктовку держат, команду нажимают. Одна кнопка: коротко нажать для команды, держать для диктовки. Работают поверх игр. На MSI Claw с ClawTweaks кнопка ниже назначит их на M1 (и M2)."/>
             </StackPanel>
+            <!-- one key for both (tap = command, hold = dictation: dictate.py one_button) or a key each -->
+            <Border x:Name="KeysModeBox" Style="{StaticResource SegBox}" Margin="0,0,0,8">
+              <UniformGrid Rows="1">
+                <RadioButton x:Name="KeysOne" Content="Одна кнопка" GroupName="keys" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="KeysTwo" Content="Две кнопки" GroupName="keys" Style="{StaticResource Seg}"/>
+              </UniformGrid>
+            </Border>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition/></Grid.ColumnDefinitions>
               <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="8"/><RowDefinition/></Grid.RowDefinitions>
-              <TextBlock Text="Диктовка" VerticalAlignment="Center"/>
+              <TextBlock x:Name="HotkeyDictLabel" Text="Диктовка" VerticalAlignment="Center"/>
               <Button x:Name="HotkeyDictation" Grid.Column="1" Style="{StaticResource Flat}" Focusable="True"
                       ToolTip="Нажмите и затем нужное сочетание. Esc: отмена"/>
-              <TextBlock Grid.Row="2" Text="Команда" VerticalAlignment="Center"/>
+              <TextBlock x:Name="HotkeyCmdLabel" Grid.Row="2" Text="Команда" VerticalAlignment="Center"/>
               <Button x:Name="HotkeyGemma" Grid.Row="2" Grid.Column="1" Style="{StaticResource Flat}" Focusable="True"
                       ToolTip="Нажмите и затем нужное сочетание. Esc: отмена"/>
             </Grid>

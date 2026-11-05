@@ -62,6 +62,8 @@ namespace ClawVoice
             AmbiBtn.Visibility = App.AmbilightInstalled ? Visibility.Visible : Visibility.Collapsed;
             LogBtn.Click += (_, _) => Stack.Open(Stack.DictateLog);
             HotkeyDictation.Click += (_, _) => Capture(HotkeyDictation);
+            foreach (var (rb, one) in new[] { (KeysOne, true), (KeysTwo, false) })
+                rb.Click += (_, _) => { Set("one_button", one); KeysMode(); _ = _clawButtons.Refresh(); };
             HotkeyGemma.Click += (_, _) => Capture(HotkeyGemma);
             HotkeyReset.Click += (_, _) => { Set("hotkey_dictation", DefaultDictation); Set("hotkey_gemma", DefaultGemma);
                                              HotkeyHint.Text = "Вернула сочетания по умолчанию"; ShowHotkeys(); _ = _clawButtons.Refresh(); };
@@ -309,6 +311,21 @@ namespace ClawVoice
             var s = Read();
             HotkeyDictation.Content = HotkeyText((string?)s["hotkey_dictation"] ?? DefaultDictation);
             HotkeyGemma.Content = HotkeyText((string?)s["hotkey_gemma"] ?? DefaultGemma);
+            KeysMode();
+        }
+
+        /// <summary>"Одна кнопка" (setting one_button): the dictation key alone, tap = command, hold = dictation; the command
+        /// row hides. Only with the assistant on (a dictation-only install has no command to tap for).</summary>
+        void KeysMode()
+        {
+            bool assistant = AssistantOn, one = assistant && (bool?)Read()["one_button"] == true;
+            KeysModeBox.Visibility = assistant ? Visibility.Visible : Visibility.Collapsed;
+            (one ? KeysOne : KeysTwo).IsChecked = true;
+            HotkeyDictLabel.Text = one ? "Кнопка" : "Диктовка";
+            var row = one ? Visibility.Collapsed : Visibility.Visible;
+            HotkeyCmdLabel.Visibility = HotkeyGemma.Visibility = row;
+            HotkeyHint.Text = one ? "Коротко нажать: команда. Держать: диктовка."
+                                  : "Диктовку держат, команду нажимают. Кнопку на корпусе назначьте на то же сочетание в её утилите.";
         }
 
         void Capture(Button b)
