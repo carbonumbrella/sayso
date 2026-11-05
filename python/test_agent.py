@@ -3,6 +3,10 @@
 import sys
 sys.stdout.reconfigure(encoding="utf-8")
 import gemma_agent as g
+# the tests assume the normal online setup, whatever this PC's settings are now ("Полностью офлайн" without a
+# model silences everything): the offline mode has its own block at the end
+_settings_get = g.voice_settings.get
+g.voice_settings.get = lambda key, *a: False if key == "offline" else _settings_get(key, *a)
 g.start_apps()  # cache the real Start menu list before _ps_out is stubbed
 
 calls = []
@@ -196,4 +200,26 @@ ok = len(said) == 1
 bad += not ok
 print(("ok  " if ok else "FAIL"), "a normal answer still speaks ->", len(said))
 g.on_speaking, g.voice_settings.get = None, real_get
+
+# "Полностью офлайн" without a model: commands only, short silent cards, nothing aloud
+online_get = g.voice_settings.get
+g.voice_settings.get = lambda key, *a: True if key == "offline" else {"provider": "none"} if key == "llm" else online_get(key, *a)
+for phrase, want in (("купи слона", g.NO_COMMAND), ("какая погода", g.NEED_NET), ("кто такой бэтмен", g.NEED_NET),
+                     ("давай поговорим", g.NO_COMMAND)):
+    got = []
+    real_notify, g.notify = g.notify, lambda text, *a, **k: got.append(text)
+    calls.clear()
+    g.handle(phrase)
+    g.notify = real_notify
+    said = [c for c in calls if c[0] == "_ps_out" and "Say" in str(c[1])]
+    ok = got == [want] and not said
+    bad += not ok
+    print(("ok  " if ok else "FAIL"), f"offline, no model: {phrase} ->", got, said)
+calls.clear()
+g.speak("Таймер завершён")
+g.time.sleep(0.2)
+ok = not [c for c in calls if c[0] == "_ps_out" and "Say" in str(c[1])]
+bad += not ok
+print(("ok  " if ok else "FAIL"), "offline, no model: nothing is spoken")
+g.voice_settings.get = online_get
 print("FAILED:", bad)

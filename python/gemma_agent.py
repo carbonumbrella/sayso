@@ -213,6 +213,8 @@ def _say_one_speaker(text, after=False):
 
 
 def speak(text):
+    if bare():  # timers and the other direct callers too
+        return
     if EARLY.pop("cut", False):  # "стоп" (or a button press) over the early first sentence: drop the rest too
         EARLY.pop("text", None)
         return
@@ -275,6 +277,7 @@ def speech_ms(text):
 
 
 def report(text, ok=True, vocal=False):
+    vocal = vocal and not bare()  # "commands only" (offline, no model): answers on the card, never aloud
     log(("OK: " if ok else "FAIL: ") + text)
     notify(text, assistant_title() if ok else f"{assistant_title()}: ошибка", ms=speech_ms(text) if vocal else 0)
     if vocal:
@@ -1491,6 +1494,10 @@ def fast_route(p):
     if re.search(r"(обнови|пересканир|перечитай|проверь|просканир)\w*\s+(?:список\s+)?(?:установленн\w+\s+)?"
                  r"(приложени|программ|игр)", p):
         return rescan_apps(), True
+    if voice_settings.get("offline") and re.search(
+            r"погод|сколько градусов|температур\w* (?:на улице|за окном)|зонт|будет ли дождь|будет ли снег|курс\w*\s|"
+            r"курс\w*$|где я\b|где мы\b|\bя\s+(?:сейчас\s+)?(?:нахожусь\s+|живу\s+)?в\s+", p):
+        return NEED_NET, False
     m = (re.search(r"\bя\s+(?:сейчас\s+|теперь\s+|уже\s+)?(?:нахожусь\s+|живу\s+|прилетел\w*\s+|приехал\w*\s+)?в\s+(.+)$", p)
          or re.search(r"(?:моё|мое|мой)\s+(?:местоположение|город)\s+(?:теперь\s+)?(.+)$", p))
     if m and not re.search(r"\bгде\b", p):
@@ -1656,6 +1663,8 @@ def internet_question(p):
     if not m:  # "найди Илона Маска" / "поищи информацию про Марс": Gemma turned it into a browser search
         m = re.match(r"^(?:найди|поищи|загугли|погугли|узнай)\w*\s+(?:в\s+интернете\s+)?(?:(?:информацию|инфу|что-нибудь)\s+)?"
                      r"(?:(?:о|об|про)\s+)?(.+)$", p)
+    if bare() and (m or re.match(r"^(?:узнай|спроси|поищи ответ|найди ответ)\w*\s", p)):
+        return NEED_NET, False
     try:
         if m:
             CTX.update(kind="wiki", query=m.group(1))
@@ -1722,6 +1731,17 @@ def llm_request(body):
     if key:
         headers["Authorization"] = "Bearer " + key
     return urllib.request.Request(llm_endpoint() + "/chat/completions", json.dumps(body).encode("utf-8"), headers)
+
+
+NO_COMMAND = "Не знаю такой команды. Модель отключена"
+NEED_NET = "Нужен интернет. Включён офлайн-режим"
+
+
+def bare():
+    """"Полностью офлайн" with no model = commands only, chosen on purpose: no offers to load a model, no advice,
+    no network tries and no voice at all (the user: commands should just act). Unknown phrases get NO_COMMAND,
+    internet ones NEED_NET, every answer is a card only."""
+    return bool(voice_settings.get("offline")) and not gemma_on()
 
 
 def gemma_on():
@@ -1981,6 +2001,8 @@ def chat_followup():
 
 def chat_reply(text):
     """One turn of free conversation with the model (history kept in CHAT)."""
+    if bare():
+        return NO_COMMAND, False
     if not gemma_on():
         PENDING["load"] = time.time() + 20
         return "Для разговора нужна Gemma. Загрузить её?", True
@@ -2010,6 +2032,9 @@ def chat_reply(text):
 
 def chat_route(text, p):
     """Conversation mode switches and turns. None = not a conversation phrase (the normal routes go on)."""
+    if bare():  # no model: "давай поговорим" must not switch on a chat that then swallows every command
+        CHAT.update(on=False, history=[])
+        return None
     if CHAT["on"] and time.time() - CHAT["t"] > CHAT_IDLE:
         CHAT.update(on=False, history=[])
     if CHAT_OFF.search(p):
@@ -2546,6 +2571,8 @@ def dialog_route(p):
             if text:
                 CTX.update(kind="wiki", query=L["query"])
                 return text, True
+        if bare():
+            return NO_COMMAND, False
         if not gemma_on():
             return "Подробнее без Gemma не расскажу. Скажи: загрузи Гемму", True
         return ask_text(f"Предыдущий вопрос: {L['q']}\nТвой ответ: {L['a']}\n"
@@ -2652,6 +2679,10 @@ def handle(text, dry=False):
                 log(f"done (fast) in {time.time() - t0:.1f}s")
                 _finish(text, fast[0])
                 return
+        if bare():  # on purpose: a short silent card, no offer to load a model
+            report(NO_COMMAND, vocal=False)
+            _finish(text, None)
+            return
         if not gemma_on():  # no model: no guessing
             if provider() == "npu" and voice_settings.gemma_dir():  # unloaded: offer to load ("да" loads it)
                 PENDING["load"] = time.time() + 20
