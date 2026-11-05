@@ -137,6 +137,7 @@ namespace ClawVoice
                         : $"Диктовка: держи {dict}, говори, отпусти: текст вставится туда, где курсор. Ошибся: так же скажи «удали». " +
                           $"Команда: нажми {cmd} и скажи, например, «громкость сорок». " +
                           $"А ещё можно позвать по имени: «{name}, сколько времени?». Сочетания меняются в настройках.";
+                    _body.Children.Add(new ClawButtonsPanel(wizard: true));  // MSI Claw with ClawTweaks: one press sets M1/M2
                     break;
                 case 2:
                     _title.Text = "Языковая модель (необязательно)";

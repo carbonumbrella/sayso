@@ -11,14 +11,17 @@
     <RootNamespace>ClawVoice</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>0.3.14</Version>
+    <Version>0.3.16</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- an idle tray app: no background GC thread, the heap kept small -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="10.*" />
     <PackageReference Include="System.Speech" Version="10.*" />
     <Resource Include="app.ico" />
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
   </ItemGroup>
 
 </Project>

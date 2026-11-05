@@ -146,7 +146,7 @@ def running_game():
     pid = re.search(r"<ProcessId>(\d+)</ProcessId>", c)
     if not pid or pid.group(1) == "0":
         return {}
-    name = re.search(r"<Name>(.*?)</Name>", c)
+    name = re.search(r"<Name>([^<]*)</Name>", c)  # the innermost one: the XML nests <Name> ("<Name><Name>Ori…")
     fps = re.search(r"<FPS>(\d+)", c)
     return {"pid": int(pid.group(1)), "name": name.group(1) if name else "", "fps": int(fps.group(1)) if fps else 0}
 

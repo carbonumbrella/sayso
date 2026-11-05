@@ -56,7 +56,9 @@ def log(msg):
 
 class PSHost:
     """One persistent powershell.exe (ps_host.ps1) for helper calls: ~10-50 ms per call instead of
-    ~0.4-0.7 s to spawn PowerShell and recompile the audio C# every time."""
+    ~0.4-0.7 s to spawn PowerShell and recompile the audio C# every time. It stays for good (~80 MB): every
+    button press calls it (stop the voice, duck other apps), and closing it on idle made the first press after a
+    pause pay ~1 s again."""
 
     def __init__(self):
         self.p, self.q, self.lock = None, None, threading.Lock()

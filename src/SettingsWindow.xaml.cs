@@ -18,7 +18,8 @@ namespace ClawVoice
     /// microphone and speech device restart the dictation; secrets go to the DPAPI file via sayso_cli.</summary>
     public partial class SettingsWindow : Window
     {
-        bool _loading;
+        bool _loading, _gemmaBusy;
+        readonly ClawButtonsPanel _clawButtons = new();  // offers to put the new hotkeys on M1/M2 after a change
         readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
         App AppRef => (App)Application.Current;
 
@@ -27,8 +28,10 @@ namespace ClawVoice
             InitializeComponent();
             Responsive.Attach(this, 900, PagesScroll, TabsGrid);  // portrait Claw: one column, scrolling, centered
             TitleBar.MouseLeftButtonDown += (_, e) => { if (e.ButtonState == MouseButtonState.Pressed) DragMove(); };
-            CloseBtn.Click += (_, _) => Hide();
-            Closing += (_, e) => { e.Cancel = true; Hide(); };
+            CloseBtn.Click += (_, _) => Close();
+            // closing destroys the window (App makes a new one on show): a hidden WPF window keeps its pages'
+            // memory. Only a download in progress keeps it, hidden, so its progress and result are not lost.
+            Closing += (_, e) => { if (_modelBusy || _gemmaBusy) { e.Cancel = true; Hide(); } };
             foreach (var (tab, page) in Tabs()) tab.Checked += (_, _) => ShowPage(page);
 
             // main
@@ -60,7 +63,7 @@ namespace ClawVoice
             HotkeyDictation.Click += (_, _) => Capture(HotkeyDictation);
             HotkeyGemma.Click += (_, _) => Capture(HotkeyGemma);
             HotkeyReset.Click += (_, _) => { Set("hotkey_dictation", DefaultDictation); Set("hotkey_gemma", DefaultGemma);
-                                             HotkeyHint.Text = "Вернула сочетания по умолчанию"; ShowHotkeys(); };
+                                             HotkeyHint.Text = "Вернула сочетания по умолчанию"; ShowHotkeys(); _ = _clawButtons.Refresh(); };
             PreviewKeyDown += OnCaptureKey;
             _tick.Tick += (_, _) => States();
             IsVisibleChanged += (_, _) => { if (IsVisible) _tick.Start(); else _tick.Stop(); };
@@ -78,7 +81,10 @@ namespace ClawVoice
                 AppRef.RestartDictationSoon();
             };
             foreach (var (rb, proc) in new[] { (MicProcHw, "auto"), (MicProcOff, "normal") })
-                rb.Click += (_, _) => { Set("mic_processing", proc); AppRef.RestartDictationSoon(); };
+                rb.Click += (_, _) => { Set("mic_processing", proc); AppRef.RestartDictationSoon(); MicFxHint(); };
+            MicFxBtn.Click += (_, _) => Stack.Open("ms-settings:sound-defaultinputproperties");
+            Activated += (_, _) => MicFxHint();  // back from the Windows sound settings
+            ClawButtonsHost.Content = _clawButtons;
             FollowSlider.ValueChanged += (_, _) => { Labels(); if (!_loading) Set("follow_sec", (int)FollowSlider.Value); };
             RateSlider.ValueChanged += (_, _) => { Labels(); if (!_loading) Set("tts_rate", (int)RateSlider.Value); };
             VolumeSlider.ValueChanged += (_, _) => { Labels(); if (!_loading) Set("tts_volume", (int)VolumeSlider.Value); };
@@ -224,6 +230,7 @@ namespace ClawVoice
             string lang = (string?)s["language"] ?? "ru";
             (lang == "en" ? LangEn : lang == "auto" ? LangAuto : LangRu).IsChecked = true;
             ((string?)s["mic_processing"] == "normal" ? MicProcOff : MicProcHw).IsChecked = true;
+            MicFxHint();
             string dev = (string?)s["stt_device"] ?? "auto";
             (dev == "NPU" ? DevNpu : dev == "GPU" ? DevGpu : dev == "CPU" ? DevCpu : DevAuto).IsChecked = true;
             string stt = (string?)s["stt_model"] ?? "auto";
@@ -394,6 +401,7 @@ namespace ClawVoice
             _captureTimer.Stop();
             ShowHotkeys();
             HotkeyHint.Text = $"Сохранено: {combo}. Работает через секунду; если занято другой программой, останется старое";
+            _ = _clawButtons.Refresh();  // the back buttons now differ: the panel offers to update them
         }
 
         static string KeyName(Key key)
@@ -434,6 +442,36 @@ namespace ClawVoice
             MicBox.ItemsSource = mics;
             MicBox.SelectedIndex = Math.Max(0, mics.IndexOf((string?)Read()["mic_device"] ?? ""));
             _loading = false;
+        }
+
+        /// <summary>Hardware processing needs Windows "Audio enhancements" on: without them the driver adds no gain,
+        /// the voice is 3-4x quieter and dictation falls back to the normal silence gate (dictate.py sysfx_off).</summary>
+        void MicFxHint()
+        {
+            bool off = MicProcHw.IsChecked == true && SysFxOff();
+            MicProcHint.Text = off ? "«Улучшение звука» у микрофона выключено, поэтому аппаратная работает как обычная. Включить: кнопка справа."
+                                   : "Аппаратная работает, если драйвер это умеет, иначе как обычная.";
+            MicProcHint.Foreground = (System.Windows.Media.Brush)FindResource(off ? "Danger" : "Sub");
+        }
+
+        /// <summary>Any working capture endpoint with "Audio enhancements" off (Disable_SysFx = 1, readable by users).</summary>
+        static bool SysFxOff()
+        {
+            try
+            {
+                using var root = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture");
+                if (root == null) return false;
+                foreach (string ep in root.GetSubKeyNames())
+                {
+                    using var k = root.OpenSubKey(ep);
+                    if (k?.GetValue("DeviceState") is not int state || state != 1) continue;
+                    using var fx = k.OpenSubKey("FxProperties");
+                    if (fx?.GetValue("{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5") is int v && v == 1) return true;
+                }
+            }
+            catch (Exception e) { Log.Write("sysfx check: " + e.Message); }
+            return false;
         }
 
         void SaveName()
@@ -509,7 +547,9 @@ namespace ClawVoice
             var progress = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             progress.Tick += (_, _) => { if (ReadProgress("gemma") is { } p) GemmaState.Text = $"Скачиваю Gemma: {p}. Окно можно закрыть позже."; };
             progress.Start();
+            _gemmaBusy = true;
             var r = await Task.Run(() => Stack.Cli("gemma-download", token, 3 * 3600 * 1000));
+            _gemmaBusy = false;
             progress.Stop();
             HfTokenBox.Password = "";  // (greys the button again: a new try needs the token pasted again)
             if (r["error"] is { } err) { GemmaState.Text = "Не скачалась: " + err; return; }

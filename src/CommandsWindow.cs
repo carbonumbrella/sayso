@@ -19,6 +19,9 @@ namespace ClawVoice
         readonly List<Border> _cards = new();
         int _shownColumns;
 
+        /// <summary>The cards one by one (--render skill-cards: a picture per card).</summary>
+        public IReadOnlyList<Border> Cards => _cards;
+
         static Style S(string key) => (Style)Application.Current.FindResource(key);
 
         public CommandsWindow()

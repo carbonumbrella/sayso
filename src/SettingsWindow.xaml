@@ -142,7 +142,7 @@
           <StackPanel Grid.Column="2">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="СОЧЕТАНИЯ КЛАВИШ" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Диктовка: держи сочетание, пока говоришь, отпусти, и текст вставится в окно с курсором. Ошибся: так же скажи «удали», и последний кусок сотрётся; «удали слово», «удали предложение», «удали всё» тоже работают. Команда: нажми один раз и скажи фразу за несколько секунд. Сочетания работают поверх игр и не доходят до них. Кнопку на корпусе (например, M1 на MSI Claw) назначь в её утилите на то же сочетание."/>
+              <local:HelpTip Text="Диктовка: держи сочетание, пока говоришь, отпусти, и текст вставится в окно с курсором. Ошибся: так же скажи «удали», и последний кусок сотрётся; «удали слово», «удали предложение», «удали всё» тоже работают. Команда: нажми один раз и скажи фразу за несколько секунд. Сочетания работают поверх игр и не доходят до них. Кнопку на корпусе назначь в её утилите на то же сочетание. На MSI Claw с ClawTweaks это делает кнопка ниже: M1 станет диктовкой, M2 командой, в общем профиле ClawTweaks; если на кнопках уже что-то назначено, SaySo сначала спросит. Пока идёт игра, записать нельзя: кнопки попали бы в её профиль."/>
             </StackPanel>
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition/></Grid.ColumnDefinitions>
@@ -160,6 +160,8 @@
               <Button x:Name="HotkeyReset" Content="По умолчанию" Style="{StaticResource Flat}" Height="30" FontSize="12"
                       HorizontalAlignment="Right" VerticalAlignment="Top"/>
             </Grid>
+            <!-- MSI Claw back buttons in ClawTweaks (ClawButtonsPanel), only where ClawTweaks is installed -->
+            <ContentControl x:Name="ClawButtonsHost"/>
             <!-- "Подсветка" only where ClawAmbilight is installed (the Claw): elsewhere two buttons share the row -->
             <UniformGrid x:Name="MainButtons" Rows="1" Margin="0,22,-8,0">
               <Button x:Name="CommandsBtn" Content="Что умеет" Style="{StaticResource Flat}" Margin="0,0,8,0"/>
@@ -213,8 +215,14 @@
                 <RadioButton x:Name="MicProcOff" Content="Обычная" GroupName="micproc" Style="{StaticResource Seg}"/>
               </UniformGrid>
             </Border>
-            <TextBlock x:Name="MicProcHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,6,0,0"
-                       Text="Аппаратная работает, если драйвер это умеет, иначе как обычная."/>
+            <Grid Margin="0,6,0,0">
+              <TextBlock x:Name="MicProcHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,150,0"
+                         Text="Аппаратная работает, если драйвер это умеет, иначе как обычная."/>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                <Button x:Name="MicFxBtn" Content="Звук в Windows" Style="{StaticResource Flat}" Height="30" FontSize="12"/>
+                <local:HelpTip Text="Открывает свойства микрофона в Параметрах Windows. Там можно выключить «Улучшение звука»: тогда драйвер перестаёт убирать шум, музыку и голос помощника, аппаратная работает как обычная, и когда играет музыка, ошибок больше. Память это не освобождает. Звуковая служба Windows держит около 450 МБ всё время, пока микрофон открыт, с улучшением и без него. Микрофон открыт всё время, пока SaySo откликается на имя (от сети). Если имя выключить, микрофон открывается только на время нажатия кнопки, и эта память освобождается."/>
+              </StackPanel>
+            </Grid>
             <StackPanel x:Name="FollowLabel" Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="СЛУШАТЬ ПОСЛЕ ОТВЕТА" Style="{StaticResource Label}" Margin="0"/>
               <local:HelpTip Text="Сколько секунд после ответа помощник ждёт следующую фразу без имени и без кнопки, как в разговоре. 0: не ждёт. Пока он слушает, музыка и видео звучат тише."/>

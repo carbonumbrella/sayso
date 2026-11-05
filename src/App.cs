@@ -80,6 +80,7 @@ namespace ClawVoice
             SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
             app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("pack://application:,,,/SaySo;component/Theme.xaml") });
             Theme.Apply(app.Resources);
+            if (tab == "skill-cards") { RenderCards(png); return; }  // png is a folder here: card-01.png, ...
             Window w;
             bool narrow = tab.EndsWith(":narrow");  // "main:narrow": the portrait Claw layout, 690 DIP wide
             tab = tab.Replace(":narrow", "");
@@ -111,6 +112,34 @@ namespace ClawVoice
             enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
             using var fs = File.Create(png);
             enc.Save(fs);
+        }
+
+        /// <summary>Every "Что умеет" card as its own PNG (2x scale, window background around it) into `dir`.</summary>
+        static void RenderCards(string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var c = new CommandsWindow();
+            int i = 0;
+            foreach (var card in new System.Collections.Generic.List<Border>(c.Cards))
+            {
+                (card.Parent as Panel)?.Children.Remove(card);
+                var holder = new Border { Padding = new Thickness(12, 12, 12, 0), Child = card, Width = 420 };
+                holder.SetResourceReference(Border.BackgroundProperty, "Bg");
+                holder.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Fg");
+                holder.SetValue(System.Windows.Documents.TextElement.FontFamilyProperty, new System.Windows.Media.FontFamily("Segoe UI Variable Text, Segoe UI"));
+                holder.SetValue(System.Windows.Documents.TextElement.FontSizeProperty, 14.0);
+                holder.Measure(new System.Windows.Size(420, double.PositiveInfinity));
+                holder.Arrange(new System.Windows.Rect(holder.DesiredSize));
+                holder.UpdateLayout();
+                var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(holder.ActualWidth * 2), (int)(holder.ActualHeight * 2), 192, 192,
+                                                                              System.Windows.Media.PixelFormats.Pbgra32);
+                bmp.Render(holder);
+                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+                using var fs = File.Create(Path.Combine(dir, $"card-{++i:00}.png"));
+                enc.Save(fs);
+                holder.Child = null;
+            }
         }
 
         void Start(bool showSettings)
@@ -148,6 +177,10 @@ namespace ClawVoice
             _watch.Start();
             Task.Run(Supervise);
             Log.Write("SaySo started");
+            TrimSoon(30000);
+            // the logon task starts the helper by itself; this covers a start after "Выход". At once: dictate.py
+            // looks for the helper right after loading Whisper (~10 s) and takes the keys itself if it is not there
+            Task.Run(Hotkeys.EnsureRunning);
             Task.Run(Autostart.Migrate);  // schtasks takes ~0.2 s
             if (showSettings) ShowSettings();
             if (SettingsWindow.Read()["setup_done"] is null) new WizardWindow().Show();  // first start after installing
@@ -198,6 +231,26 @@ namespace ClawVoice
 
         public static string StatusLine() => _status;
 
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        static extern bool SetProcessWorkingSetSize(IntPtr process, IntPtr min, IntPtr max);
+
+        System.Threading.Timer? _trim;
+
+        /// <summary>A few seconds after start or after a window closes: collect and hand the working set back to
+        /// Windows. A tray app that sits idle all day does not need the settings pages' memory in RAM.</summary>
+        public void TrimSoon(int ms = 5000)
+        {
+            _trim?.Dispose();
+            _trim = new System.Threading.Timer(_ => Dispatcher.BeginInvoke(() =>
+            {
+                if (_settings?.IsVisible == true) return;
+                System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+                GC.WaitForPendingFinalizers();
+                SetProcessWorkingSetSize(System.Diagnostics.Process.GetCurrentProcess().Handle, -1, -1);
+            }), null, ms, Timeout.Infinite);
+        }
+
         static readonly string[] Commands = { "dictation-on", "dictation-off", "gemma-on", "gemma-off" };
 
         static string? Command(string[] args)
@@ -236,7 +289,11 @@ namespace ClawVoice
 
         public void ShowTrainer()
         {
-            if (_trainer == null || !_trainer.IsLoaded) _trainer = new TrainerWindow();
+            if (_trainer == null || !_trainer.IsLoaded)
+            {
+                _trainer = new TrainerWindow();
+                _trainer.Closed += (_, _) => TrimSoon();
+            }
             _trainer.Show();
             _trainer.Activate();
         }
@@ -283,7 +340,7 @@ namespace ClawVoice
             m.Items.Add(log);
             m.Items.Add(restart);
             m.Items.Add(new Forms.ToolStripSeparator());
-            m.Items.Add("Выход (остановить помощника)", null, (_, _) => Exit(stopStack: true));
+            m.Items.Add("Выход (выгрузить помощника)", null, (_, _) => Exit(stopStack: true));
             m.Opening += (_, _) =>
             {
                 status.Text = string.IsNullOrEmpty(_status) ? "Проверяю…" : _status.Replace(" · ", "\n");
@@ -297,7 +354,12 @@ namespace ClawVoice
 
         void ShowSettings()
         {
-            _settings ??= new SettingsWindow();
+            if (_settings == null)
+            {
+                _settings = new SettingsWindow();
+                _settings.IsVisibleChanged += (_, e) => { if (!(bool)e.NewValue) TrimSoon(); };
+                _settings.Closed += (_, _) => { _settings = null; TrimSoon(); };
+            }
             _settings.Reload();
             Responsive.BringToFront(_settings);
         }
@@ -305,6 +367,7 @@ namespace ClawVoice
         public void ShowCommands()
         {
             var w = new CommandsWindow();
+            w.Closed += (_, _) => TrimSoon();
             w.Show();
             w.Activate();
         }
@@ -323,7 +386,11 @@ namespace ClawVoice
         void Exit(bool stopStack)
         {
             _watch.Stop();
-            if (stopStack) { Stack.Stop(Dictate); Stack.Stop(Server); }
+            if (stopStack)  // everything out of memory: dictation (its mic and PowerShell helpers end with it), Gemma, hotkeys
+            {
+                Stack.Stop(Dictate); Stack.Stop(Server);
+                Hotkeys.Quit();
+            }
             _tray.Visible = false;
             _tray.Dispose();
             Shutdown();

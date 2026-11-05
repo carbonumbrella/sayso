@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management;
+using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 
 namespace ClawVoice
 {
@@ -180,6 +182,51 @@ namespace ClawVoice
             string outp = p.StandardOutput.ReadToEnd().Trim();
             p.WaitForExit(20000);
             return outp;
+        }
+    }
+
+    /// <summary>The elevated hotkey listener (hotkey_helper.py, logon task SaySoHotkeys). SaySo cannot kill an
+    /// elevated process, so it asks it to leave over its ping port; running the task needs no elevation.</summary>
+    static class Hotkeys
+    {
+        static readonly IPEndPoint Ping = new(IPAddress.Loopback, 47320);
+
+        public static bool Alive()
+        {
+            try
+            {
+                using var u = new UdpClient(0, AddressFamily.InterNetwork) { Client = { ReceiveTimeout = 400 } };
+                u.Send(System.Text.Encoding.ASCII.GetBytes("ping"), 4, Ping);
+                var from = new IPEndPoint(IPAddress.Any, 0);
+                return System.Text.Encoding.ASCII.GetString(u.Receive(ref from)) == "pong";
+            }
+            catch { return false; }
+        }
+
+        public static void Quit()
+        {
+            try
+            {
+                using var u = new UdpClient();
+                u.Send(System.Text.Encoding.ASCII.GetBytes("quit"), 4, Ping);
+                Log.Write("hotkey helper asked to quit");
+            }
+            catch (Exception e) { Log.Write("hotkey quit: " + e.Message); }
+        }
+
+        /// <summary>After "Выход" the helper is gone until the next logon: start its task again.</summary>
+        public static void EnsureRunning()
+        {
+            if (Alive()) return;
+            try
+            {
+                var psi = new ProcessStartInfo("schtasks.exe", "/run /tn SaySoHotkeys")
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                using var p = Process.Start(psi)!;
+                p.WaitForExit(10000);
+                Log.Write("hotkey helper not answering: started task SaySoHotkeys, exit " + p.ExitCode);
+            }
+            catch (Exception e) { Log.Write("hotkey task: " + e.Message); }
         }
     }
 

@@ -22,7 +22,7 @@ if exist "%STAGE%" rmdir /s /q "%STAGE%"
 mkdir "%STAGE%\app" "%STAGE%\plugins"
 copy /y publish\SaySo.exe "%STAGE%\app\" >nul
 for %%F in (dictate.py gemma_agent.py net_skills.py wake.py tts_player.py hotkey_helper.py voice_settings.py plugins.py commands.py ^
-            tg.py sayso_cli.py npu_server.py ps_host.ps1 confirm.ps1 install_hotkey_task.ps1 bootstrap.ps1 launch_bootstrap.ps1 ^
+            tg.py sayso_cli.py claw_buttons.py npu_server.py ps_host.ps1 confirm.ps1 install_hotkey_task.ps1 bootstrap.ps1 launch_bootstrap.ps1 ^
             requirements.txt requirements-npu.txt silero_vad.onnx) do copy /y "%PYSRC%\%%F" "%STAGE%\" >nul || exit /b 1
 for %%F in (english.py claw_tweaks.py _claw_ipc.py ambilight.py) do copy /y "%PYSRC%\plugins\%%F" "%STAGE%\plugins\" >nul || exit /b 1
 rem mic_capture.exe: the mic with the driver's speech processing; the in-box .NET Framework compiler builds it

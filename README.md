@@ -13,7 +13,19 @@
   - Телеграм, погода, курсы валют, таймеры и напоминания.
 - **Разговор:** «давай поговорим», если подключена языковая модель (подойдёт бесплатный Gemini).
 - **Свои команды и плагины.**
-- **MSI Claw:** мощность, вентиляторы, режимы, оверлей и пауза игры голосом через [ClawTweaks](https://github.com/enterTheVoidCode/ClawTweaksCenter). Подсветка стиков через [ClawAmbilight](https://github.com/carbonumbrella/claw-ambilight). Работает и в режиме Xbox.
+- **MSI Claw:** мощность, вентиляторы, режимы, оверлей и пауза игры голосом через [ClawTweaks](https://github.com/enterTheVoidCode/ClawTweaksCenter). Задние кнопки M1 и M2 SaySo назначает сам: диктовка и команда, и в профилях игр тоже. Подсветка стиков через [ClawAmbilight](https://github.com/carbonumbrella/claw-ambilight). Работает и в режиме Xbox.
+
+## Как выглядит
+
+| | |
+|---|---|
+| ![Основное](docs/screenshots/main.png) | ![Голос](docs/screenshots/voice.png) |
+| ![Распознавание](docs/screenshots/recognition.png) | ![Свои команды](docs/screenshots/commands.png) |
+| ![Плагины](docs/screenshots/plugins.png) | ![Мастер первого запуска](docs/screenshots/wizard.png) |
+
+![Что умеет](docs/screenshots/skills.png)
+
+На MSI Claw в портретной ориентации окно перестраивается в одну колонку: [пример](docs/screenshots/main-claw.png).
 
 ## Документация
 

@@ -135,6 +135,59 @@ if _noted:  # loaded: not a crash. A note we skipped (previous crash) stays, the
     os.remove(LOADING_FILE)
 print(f"Whisper {os.path.basename(MODEL)} on {DEVICE}, language {LANG or 'auto'}", flush=True)
 whisper_lock = threading.Lock()  # hotkey recordings and the wake listener share one pipeline
+
+
+class _PMC(ctypes.Structure):
+    _fields_ = [("cb", ctypes.c_ulong), ("PageFaultCount", ctypes.c_ulong)] + [(n, ctypes.c_size_t) for n in (
+        "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage", "QuotaPagedPoolUsage",
+        "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage", "PagefileUsage", "PeakPagefileUsage")]
+
+
+_k32, _psapi = ctypes.WinDLL("kernel32"), ctypes.WinDLL("psapi")
+_k32.GetCurrentProcess.restype = ctypes.c_void_p
+_psapi.EmptyWorkingSet.argtypes = [ctypes.c_void_p]
+_psapi.GetProcessMemoryInfo.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong]
+_trim_timer = None
+
+
+def _working_set_mb():
+    c = _PMC(cb=ctypes.sizeof(_PMC))
+    _psapi.GetProcessMemoryInfo(_k32.GetCurrentProcess(), ctypes.byref(c), c.cb)
+    return c.WorkingSetSize >> 20
+
+
+def _trim():
+    if _working_set_mb() > 400:
+        _psapi.EmptyWorkingSet(_k32.GetCurrentProcess())
+
+
+def trim_memory(delay=3.0):
+    """NPU only. After its first inference this process holds ~2.5 GB of working set (the cache blobs mapped in and
+    a host copy), but later inferences touch ~50 MB of it: the model runs from the NPU driver's own memory (~2.2 GB
+    for turbo fp16, the size of its blobs, not counted here). Handing the set back frees ~0.3 GB of RAM in practice
+    (the rest is compressed by Windows) at no measurable cost per phrase (0.46 s either way, Claw 8 AI+); it runs
+    only while the set is big again: after the load and the rare phrase that grows it."""
+    global _trim_timer
+    if DEVICE != "NPU":
+        return
+    if _trim_timer is not None:
+        _trim_timer.cancel()
+    _trim_timer = threading.Timer(delay, _trim)
+    _trim_timer.daemon = True
+    _trim_timer.start()
+
+
+def warm_up(p):
+    """One inference on silence: the first one maps the model in (0.9 s instead of 0.45 s), better now than on the
+    user's first phrase, and the working set it leaves behind is trimmed right after."""
+    try:
+        p.generate([0.0] * RATE, task="transcribe")
+    except Exception as e:
+        print(f"warm-up failed: {e!r}", flush=True)
+    trim_memory(0.5)
+
+
+warm_up(pipe)
 STATE_FILE = os.path.join(HERE, "stt_state.json")  # what is loaded, for the settings (model in use, one being prepared)
 
 
@@ -171,6 +224,7 @@ def _prepare_npu():
         print(f"switching to {os.path.basename(model)} failed: {e!r}", flush=True)
         write_state()
         return
+    warm_up(new)
     with whisper_lock:
         pipe, MODEL = new, model
     write_state()
@@ -355,6 +409,30 @@ class HelperMic:
             self.p.kill()
 
 
+def sysfx_off(name):
+    """True when Windows "Audio enhancements" are off for the capture endpoint called `name`. Speech mode then
+    gets no driver gain (the voice is ~3-4x quieter) and its silence gate drops real phrases."""
+    import winreg
+    base = r"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture"
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base) as root:
+            for i in range(winreg.QueryInfoKey(root)[0]):
+                ep = winreg.EnumKey(root, i)
+                try:
+                    with winreg.OpenKey(root, ep + r"\Properties") as k:
+                        short = winreg.QueryValueEx(k, "{a45c254e-df1c-4efd-8020-67d146a850e0},2")[0]
+                        desc = winreg.QueryValueEx(k, "{b3f8fa53-0004-438e-9003-51a46e139bfc},6")[0]
+                    if name != f"{short} ({desc})":
+                        continue
+                    with winreg.OpenKey(root, ep + r"\FxProperties") as k:
+                        return winreg.QueryValueEx(k, "{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5")[0] == 1
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    return False
+
+
 def open_mic():
     global stream, MIC_MODE
     if (voice_settings.get("mic_processing") or "auto") != "normal" and os.path.exists(MIC_EXE):
@@ -362,6 +440,9 @@ def open_mic():
             stream = HelperMic("auto", voice_settings.get("mic_device") or "")
             MIC_MODE = stream.mode
             print(f"mic: {stream.name}, {stream.mode} mode ({stream.rate} Hz)", flush=True)
+            if MIC_MODE == "speech" and sysfx_off(stream.name):
+                MIC_MODE = "normal"  # no driver gain: the normal silence gate, or quiet speech is dropped
+                print("audio enhancements are off for this mic: normal silence gate", flush=True)
             others = mic_users()
             if stream.mode == "speech" and others:
                 # a second capture in speech mode broke the driver's processing (music -47 -> -28 dBFS)
@@ -488,6 +569,7 @@ def speech_to_text(audio, quiet=False, wake_gate=None):
     t = time.time()
     with whisper_lock:
         text = pipe.generate(audio.tolist(), **kw).texts[0].strip()
+    trim_memory()
     # Whisper loops on a short repeated sound: a lone "Мурмур" came back as "Мурмурмурмур…" (hundreds of
     # times). Three or more repeats of one 2-5 letter unit collapse to two ("мурмур").
     text = re.sub(r"(?i)(\w{2,5}?)\1{2,}", r"\1\1", text)
@@ -967,6 +1049,26 @@ if want_warm():
 threading.Thread(target=manage_mic, daemon=True).start()
 threading.Thread(target=run_trainer_port, daemon=True).start()
 threading.Thread(target=duck_worker, daemon=True).start()
+
+
+def claw_profiles_worker():
+    """Setting claw_buttons_auto: M1/M2 into the gamepad profile ClawTweaks makes (blank) for each new game profile."""
+    try:
+        import claw_buttons
+    except Exception as e:
+        print(f"claw buttons unavailable: {e!r}", flush=True)
+        return
+    while True:
+        time.sleep(10)
+        try:
+            game = claw_buttons.fill_new_game_profiles(lambda m: print(m, flush=True))
+            if game:
+                ov("info", f"Кнопки M1 и M2 добавлены в профиль геймпада игры {game}", "ClawTweaks", 5000)
+        except Exception as e:
+            print(f"claw buttons: {e!r}", flush=True)
+
+
+threading.Thread(target=claw_profiles_worker, daemon=True).start()
 threading.Thread(target=lambda: agent().warm(), daemon=True).start()  # first command must not pay startup
 if helper_alive():
     run_helper_events()

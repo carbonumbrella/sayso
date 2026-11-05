@@ -7,6 +7,7 @@
 #   gemma-download           Hugging Face token from stdin -> NPU server packages + Gemma model
 #   match <phrase>           which user command a phrase hits (command editor test)
 #   name-test <phrase>       does the wake regex accept it (name trainer)
+#   claw-buttons             ClawTweaks M1/M2 now vs SaySo hotkeys      claw-buttons-set   write them (no game running)
 import json, os, sys, time
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -272,6 +273,12 @@ def main(argv):
             return out(mics())
         if cmd == "hw":
             return out(hw())
+        if cmd == "claw-buttons":
+            import claw_buttons
+            return out(claw_buttons.state())
+        if cmd == "claw-buttons-set":
+            import claw_buttons
+            return out(claw_buttons.write())
         if cmd == "models":
             return out(models())
         if cmd == "gemma-download":  # token on stdin, never on the command line

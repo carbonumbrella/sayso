@@ -29,6 +29,8 @@ def answer_pings():
         data, addr = s.recvfrom(64)
         if data == b"ping":
             s.sendto(b"pong", addr)
+        elif data == b"quit":  # SaySo "Выход": the whole stack leaves memory; SaySo restarts the task on its next start
+            os._exit(0)
 
 
 def register(keys, old=None):
