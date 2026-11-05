@@ -108,7 +108,7 @@ namespace ClawVoice
             GemmaHowBtn.Click += (_, _) => Stack.Open(GuideUrl + "#gemma-на-этом-компьютере");
             GemmaGetBtn.Click += async (_, _) => await GetGemma();
             _ = DetectNpu();
-            OfflineSwitch.Click += (_, _) => { Set("offline", OfflineSwitch.IsChecked == true); OfflineGate(); ShowModelNow(); };
+            OfflineSwitch.Click += (_, _) => { Set("offline", OfflineSwitch.IsChecked == true); OfflineGate(); ModelFields(); ShowModelNow(); };
             CityBtn.Click += async (_, _) => await SetCity();
             CityBox.KeyDown += async (_, e) => { if (e.Key == Key.Return) await SetCity(); };
 
@@ -503,7 +503,9 @@ namespace ClawVoice
             GemmaState.Text = _gemmaHere ? "Gemma скачана. Включается тумблером на вкладке «Основное»."
                 : "Gemma ещё не скачана (3.3 ГБ). Нужен бесплатный аккаунт Hugging Face, где принята лицензия Gemma, и его токен.";
             GemmaGet.Visibility = _gemmaHere ? Visibility.Collapsed : Visibility.Visible;
-            ProvHint.Text = ProvNone.IsChecked == true ? "Команды, плагины и ответы из интернета работают без модели. Свободного разговора нет."
+            ProvHint.Text = ProvNone.IsChecked == true ? (OfflineSwitch.IsChecked == true  // offline + no model: commands only
+                    ? "Только команды: ответы карточкой, без голоса. Интернета и свободного разговора нет."
+                    : "Команды, плагины и ответы из интернета работают без модели. Свободного разговора нет.")
                 : ProvNpu.IsChecked == true ? "Gemma 3 4B прямо на этом компьютере, без интернета. Около 4 ГБ памяти, устройство выбирается ниже."
                 : ProvServer.IsChecked == true ? "Свой сервер: Ollama (http://127.0.0.1:11434), LM Studio (http://127.0.0.1:1234), llama.cpp."
                 : "Облачная модель. Бесплатный Gemini: адрес и модель уже подставлены, нужен только ключ. Фразы для модели уходят в интернет.";
