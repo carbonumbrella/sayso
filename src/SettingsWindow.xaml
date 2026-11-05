@@ -139,7 +139,11 @@
               </StackPanel>
             </Border>
           </StackPanel>
-          <StackPanel Grid.Column="2">
+          <!-- the buttons row sits at the bottom, level with the bottom of the left card ("ПРОЧЕЕ"), apart from the
+               switches above it; when this column is the taller one it simply follows them -->
+          <Grid Grid.Column="2">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+            <StackPanel>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="СОЧЕТАНИЯ КЛАВИШ" Style="{StaticResource Label}" Margin="0"/>
               <local:HelpTip Text="Две кнопки: диктовку держат, команду нажимают. Одна кнопка: коротко нажать для команды, держать для диктовки. Работают поверх игр. На MSI Claw с ClawTweaks кнопка ниже назначит их на M1 (и M2)."/>
@@ -169,13 +173,14 @@
             </Grid>
             <!-- MSI Claw back buttons in ClawTweaks (ClawButtonsPanel), only where ClawTweaks is installed -->
             <ContentControl x:Name="ClawButtonsHost"/>
+            </StackPanel>
             <!-- "Подсветка" only where ClawAmbilight is installed (the Claw): elsewhere two buttons share the row -->
-            <UniformGrid x:Name="MainButtons" Rows="1" Margin="0,22,-8,0">
+            <UniformGrid x:Name="MainButtons" Grid.Row="1" Rows="1" Margin="0,22,-8,0" VerticalAlignment="Bottom">
               <Button x:Name="CommandsBtn" Content="Что умеет" Style="{StaticResource Flat}" Margin="0,0,8,0"/>
               <Button x:Name="AmbiBtn" Content="Подсветка" Style="{StaticResource Flat}" Margin="0,0,8,0"/>
               <Button x:Name="LogBtn" Content="Журнал" Style="{StaticResource Flat}" Margin="0,0,8,0"/>
             </UniformGrid>
-          </StackPanel>
+          </Grid>
         </Grid>
 
         <!-- ================= voice ================= -->

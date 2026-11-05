@@ -11,7 +11,7 @@
     <RootNamespace>ClawVoice</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>0.3.16</Version>
+    <Version>0.3.17</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- an idle tray app: no background GC thread, the heap kept small -->
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
