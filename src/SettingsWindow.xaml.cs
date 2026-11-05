@@ -595,7 +595,7 @@ namespace ClawVoice
             bool on = !commandsOnly && (bool?)s["speak_answers"] != false;
             SpeakSwitch.IsEnabled = !commandsOnly;
             SpeakSwitch.IsChecked = on;
-            SpeakHint.Text = on ? "Ответы читаются вслух" : "Ответы только на карточке, без голоса";  // why it is greyed: the "?"
+            SpeakHint.Text = on ? "Ответы читаются выбранным голосом" : "Ответы только на карточке, без голоса";  // why it is greyed: the "?"
             foreach (var c in new Control[] { VoiceBox, VoiceTestBtn, RateSlider, VolumeSlider })
             {
                 c.IsEnabled = on;
