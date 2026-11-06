@@ -38,7 +38,8 @@ namespace ClawVoice
             DictationSwitch.Click += (_, _) => { bool on = DictationSwitch.IsChecked == true; Task.Run(() => AppRef.SetDictation(on)); };
             GemmaSwitch.Click += (_, _) => { bool on = GemmaSwitch.IsChecked == true; Task.Run(() => AppRef.SetGemma(on)); };
             ListenSwitch.Click += (_, _) => Stack.Listening = ListenSwitch.IsChecked == true;
-            WarmSwitch.Click += (_, _) => Set("warm_mic", WarmSwitch.IsChecked == true);
+            foreach (var (rb, mode) in new[] { (MicReadyAlways, "always"), (MicReadyLinger, "linger"), (MicReadyPress, "press") })
+                rb.Click += (_, _) => { Set("mic_ready", mode); MicReadyShow(); };
             BeepSwitch.Click += (_, _) => Set("beeps", BeepSwitch.IsChecked == true);
             SpeakSwitch.Click += (_, _) => { Set("speak_answers", SpeakSwitch.IsChecked == true); SpeakGate(); };
             LogSwitch.Click += (_, _) =>
@@ -176,7 +177,7 @@ namespace ClawVoice
             if (page == PageVoice) LoadVoicePage();
             if (page == PageCmd) CmdFill();
             if (page == PagePlug) PlugFill();
-            if (page == PageSys) { LoadSysPage(); _ = FillModels(); }
+            if (page == PageSys) { LoadSysPage(); LoadVoicePage(); _ = FillModels(); }  // the mic list lives on this page now
             if (page == PageMore) _ = FillAppFolders();
             if (page == PageTg)
             {
@@ -225,7 +226,7 @@ namespace ClawVoice
             FollowSlider.Value = (double?)s["follow_sec"] ?? 6;
             RateSlider.Value = (double?)s["tts_rate"] ?? 0;
             VolumeSlider.Value = (double?)s["tts_volume"] ?? 100;
-            WarmSwitch.IsChecked = (bool?)s["warm_mic"] ?? true;
+            MicReadyShow();
             BeepSwitch.IsChecked = (bool?)s["beeps"] ?? true;
             LogSwitch.IsChecked = LogBtn.IsEnabled = DictationLogOn;
             OfflineSwitch.IsChecked = (bool?)s["offline"] ?? false;
@@ -469,7 +470,7 @@ namespace ClawVoice
         void MicFxHint()
         {
             bool off = MicProcHw.IsChecked == true && SysFxOff();
-            MicProcHint.Text = off ? "«Улучшение звука» у микрофона выключено, поэтому аппаратная работает как обычная. Включить: кнопка справа."
+            MicProcHint.Text = off ? "«Улучшение звука» выключено. Для диктовки лучше «Эффекты устройства по умолчанию»."
                                    : "Аппаратная работает, если драйвер это умеет, иначе как обычная.";
             MicProcHint.Foreground = (System.Windows.Media.Brush)FindResource(off ? "Danger" : "Sub");
         }
@@ -492,6 +493,26 @@ namespace ClawVoice
             }
             catch (Exception e) { Log.Write("sysfx check: " + e.Message); }
             return false;
+        }
+
+        /// <summary>"Микрофон наготове" (mic_ready, dictate.py): always on AC / 5 min after a press / only while held.
+        /// An old "warm_mic" switch set by hand on counts as "always"; otherwise the default is 5 minutes.</summary>
+        static string MicReady()
+        {
+            var s = Read();
+            return (string?)s["mic_ready"] ?? ((bool?)s["warm_mic"] == true ? "always" : "linger");
+        }
+
+        void MicReadyShow()
+        {
+            string m = MicReady();
+            (m == "always" ? MicReadyAlways : m == "press" ? MicReadyPress : MicReadyLinger).IsChecked = true;
+            MicReadyHint.Text = m switch
+            {
+                "always" => "От сети микрофон открыт всегда, от батареи ещё 5 минут после нажатия. В трее горит значок микрофона",
+                "press" => "Микрофон открыт только пока нажата кнопка",
+                _ => "После нажатия микрофон открыт ещё 5 минут, в трее горит значок микрофона",
+            };
         }
 
         void SaveName()
@@ -1286,7 +1307,7 @@ namespace ClawVoice
             try
             {
                 using var zip = ZipFile.Open(dest, ZipArchiveMode.Create);
-                foreach (string log in new[] { "dictate.log", "sayso.log", "hotkey_helper.log", "npu_server.log" })
+                foreach (string log in new[] { "dictate.log", "dictate.prev.log", "sayso.log", "hotkey_helper.log", "npu_server.log" })
                 {
                     string p = Path.Combine(Stack.Dir, log);
                     if (!File.Exists(p)) continue;

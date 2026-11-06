@@ -26,7 +26,13 @@ import voice_settings  # follow_sec, warm_mic (written by the ClawVoice tray Set
 HERE = os.path.dirname(os.path.abspath(__file__))
 import voice_settings as _vs  # stt_device / language from SaySo Settings (env vars still override)
 if sys.stdout is None:  # pythonw (autostart): no console, log to a file instead
-    sys.stdout = sys.stderr = open(os.path.join(HERE, "dictate.log"), "w", encoding="utf-8", buffering=1)
+    _log = os.path.join(HERE, "dictate.log")
+    try:  # the previous run stays readable after a restart (a failure was lost when the next start wiped the log)
+        os.replace(_log, os.path.join(HERE, "dictate.prev.log"))
+    except OSError:
+        pass
+    import crashlog
+    sys.stdout = sys.stderr = crashlog.setup(open(_log, "w", encoding="utf-8", buffering=1))
     if _vs.get("dictation_log") is False:
         # Settings "Журнал диктовки" off: no recognized text or events on disk (every print goes to stdout);
         # errors and tracebacks (stderr) still land in the file
@@ -296,15 +302,24 @@ def on_ac():
     return bool(ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(ps))) and ps.ACLineStatus == 1
 
 
+def mic_ready():
+    """Setting mic_ready (Settings, "Микрофон наготове"): "always" (open on AC), "linger" (MIC_LINGER_SEC after a
+    press, the default) or "press" (only while held). An old warm_mic switched on by hand counts as "always"."""
+    raw = voice_settings.load_raw()
+    m = raw.get("mic_ready")
+    return m if m in ("always", "linger", "press") else "always" if raw.get("warm_mic") is True else "linger"
+
+
 def want_warm():
-    return WARM_MIC and voice_settings.get("warm_mic") and on_ac() and listening  # listening off: the mic (tray icon) sleeps like on battery
+    # on AC the mic stays open for the name (listening) whatever mic_ready says, and with "always" also without it
+    return WARM_MIC and on_ac() and (listening or mic_ready() == "always")
 
 
 MIC_LINGER_SEC = 300  # after a press the mic stays open this long (battery too): waking it took ~1 s, the first word was lost
 
 
 def recently_used():
-    return time.time() - last_stop_time < MIC_LINGER_SEC
+    return mic_ready() != "press" and time.time() - last_stop_time < MIC_LINGER_SEC
 
 
 def close_mic():
@@ -630,9 +645,18 @@ def start_overlay():
         subprocess.Popen([OVERLAY_EXE], cwd=os.path.dirname(OVERLAY_EXE))
 
 
-def transcribe(audio, m):
+SHORT_HOLD_SEC = 1.0  # one-button mode: a hold this short that heard nothing was a slow tap, not dictation
+
+
+def transcribe(audio, m, held=0.0):
     text = speech_to_text(audio)
     if not text:
+        if m == "paste" and one_button() and held < SHORT_HOLD_SEC:
+            # the finger stayed a little too long for a tap, nothing was said: open the command window after all
+            print(f"held {held:.2f}s and silent: the command window", flush=True)
+            ov("hide")  # the "Распознаю… Диктовка" card must go: the command window shows on its own
+            start("agent")
+            return
         ov("hide")
         return
     if m == "agent":
@@ -930,8 +954,12 @@ def _hold_confirmed(sid):
     ov("listen", "Слушаю…", "Диктовка")
 
 
+_down_at = 0.0  # the last press, for the key up line in the log
+
+
 def start(m="paste"):
-    global recording, chunks, session, mode, tap_pending
+    global recording, chunks, session, mode, tap_pending, _down_at
+    _down_at = time.time()
     if m == "agent" and not _vs.assistant_on():  # dictation-only install: the command button has nothing to run
         ov("info", "Установлена только диктовка. Помощника включают в настройках SaySo", None, 4000)
         return
@@ -992,7 +1020,7 @@ def stop():
     unduck()
     beep(BEEP_STOP)
     ov("think", "Распознаю…", None if mode == "agent" else "Диктовка")
-    threading.Thread(target=transcribe, args=(audio, mode), daemon=True).start()
+    threading.Thread(target=transcribe, args=(audio, mode, time.time() - _down_at), daemon=True).start()
 
 
 def helper_alive(tries=6):
@@ -1048,8 +1076,10 @@ def run_helper_events():
     while True:
         msg = s.recvfrom(64)[0].decode(errors="ignore").split()
         if msg[:1] == ["down"]:
+            print(f"key down {msg[1] if len(msg) > 1 else 'paste'}", flush=True)
             start(msg[1] if len(msg) > 1 else "paste")
         elif msg[:1] == ["up"]:
+            print(f"key up, held {time.time() - _down_at:.2f}s" if _down_at else "key up", flush=True)
             stop()
 
 

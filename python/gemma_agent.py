@@ -1391,6 +1391,47 @@ def power_mode(guid=None):
         return None
 
 
+def windows_theme(dark=None):
+    """Windows light / dark mode for the system and the apps (HKCU Personalize, no admin); dark=None toggles. The
+    change is announced (WM_SETTINGCHANGE "ImmersiveColorSet"), so the taskbar and open windows follow at once."""
+    key = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as k:
+        if dark is None:
+            try:
+                dark = winreg.QueryValueEx(k, "AppsUseLightTheme")[0] == 1
+            except OSError:
+                dark = True
+        for name in ("AppsUseLightTheme", "SystemUsesLightTheme"):
+            winreg.SetValueEx(k, name, 0, winreg.REG_DWORD, 0 if dark else 1)
+    res = ctypes.c_size_t()
+    ctypes.windll.user32.SendMessageTimeoutW(0xFFFF, 0x001A, 0, "ImmersiveColorSet", 0x0002, 3000, ctypes.byref(res))
+    return "Тёмная тема Windows" if dark else "Светлая тема Windows"
+
+
+def theme_route(p):
+    """"тёмная тема", "светлая тема", "переключи тему" ("ночной режим" / "дневной режим" are the night light)."""
+    if not re.search(r"\bтем[аыуе]\b|\bт[её]мн\w* (?:режим|оформлен)|\bсветл\w* (?:режим|оформлен)|dark mode|light mode", p):
+        return None
+    if re.search(r"т[её]мн|ночн|dark", p):  # "ночная тема"; "ночной режим" alone never gets here: it is the night light
+        return windows_theme(True), False
+    if re.search(r"светл|light", p):
+        return windows_theme(False), False
+    if re.search(r"переключ|смени|поменя|другую", p):
+        return windows_theme(None), False
+    return None
+
+
+def night_route(p):
+    """Night light ahead of the app routes ("выключи ночной режим" was taken as closing an app called like that).
+    "дневной режим" / "дневной свет" = the night light off (not the light theme); "выключи дневной режим" = on."""
+    off = bool(re.search(r"\b(?:вы|от)ключ|убер|без ", p))
+    if re.search(r"дневн\w* (?:свет|режим)", p):
+        return night_light(off), False
+    if re.search(r"ночн\w* (?:свет|режим)|night ?light", p):
+        return night_light(None if re.search(r"переключ", p) else not off), False
+    return None
+
+
 def power_mode_route(p):
     """"Windows эффективность / баланс / производительность", "режим питания …", "какой режим питания"."""
     win = re.search(WIN_WORD, p)
@@ -1631,7 +1672,7 @@ def fast_route(p):
         return optiscaler(), False
     if re.search(r"(?:полн\w*|наполн\w*|весь|full) ?(?:экран|screen)|полноэкран|fullscreen", p):
         return fullscreen(), False
-    if re.search(r"ночн\w* (свет|режим)|night ?light", p):
+    if re.search(r"дневн\w* (свет|режим)", p):  # "дневной режим" = the night light off (not the light theme)
         on = None if re.search(r"переключ", p) else not re.search(r"\b(вы|от)ключ|убер|без ", p)
         return night_light(on), False
     if re.search(r"автоповорот|поворот\w* экран|ориентаци", p):
@@ -2448,7 +2489,7 @@ HELP_FILE = os.path.join(HERE, "commands.txt")  # shown by the SaySo tray menu (
 HELP_FULL = """🎙 SaySo: голосовой помощник
 🎙 Как позвать: держите кнопку диктовки и говорите: текст напечатается у курсора · нажмите кнопку команды и скажите команду · или скажите «{name}, …» (от сети, когда включено слушание) · после вопроса или ответа со сведениями я ещё слушаю несколько секунд · «стоп» перебивает ответ
 🔊 Звук и экран: громкость 40 · громче, тише · какая громкость / яркость · выключи / включи звук · яркость 70 · ночной свет вкл/выкл · микрофон вкл/выкл · пауза, следующий / предыдущий трек · экранная клавиатура · автоповорот экрана
-🖥 Окна и система: сверни окна · сверни / разверни / переключись на программу · полный экран (F11 в браузере, Alt+Enter в игре) · меню OptiScaler · заблокируй компьютер (экран блокировки) · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox · режим питания Windows: эффективность / баланс / производительность · выключи, перезагрузи, усыпи (с подтверждением) · выключи компьютер через 10 минут · отмени выключение
+🖥 Окна и система: сверни окна · сверни / разверни / переключись на программу · полный экран (F11 в браузере, Alt+Enter в игре) · меню OptiScaler · заблокируй компьютер (экран блокировки) · перейди в режим Windows / выйди из Xbox · перейди в режим Xbox · режим питания Windows: эффективность / баланс / производительность · тёмная / светлая тема, переключи тему · выключи, перезагрузи, усыпи (с подтверждением) · выключи компьютер через 10 минут · отмени выключение
 📂 Программы и файлы: открой / закрой любую программу или игру · открой ютуб / гугл / почту / гитхаб · открой настройки блютуз / вайфай / звука / экрана … · настройки SaySo / подсветки / kbdhaptic · обнови список приложений · свои папки с программами и играми: настройки → «Ещё» · найди файл … (по всему диску) · открой / покажи / скопируй найденный файл
 ⌨️ Печать командой: напиши … · допиши … · с новой строки … · отправь (нажмёт Enter)
 ✏️ Правка голосом (кнопкой диктовки, фраза целиком): удали · удали слово / три слова · удали предложение · удали всё · замени … на … · новая строка · новый абзац · точка, запятая, вопрос · с большой / маленькой буквы · отмени, верни обратно · выдели / скопируй / вырежи всё · скопируй, вставь · в начало, в конец · отправить · «напиши удали» печатает само слово
@@ -2701,6 +2742,12 @@ def command_route(p, text):
     # "найди файл клоу амбилайт": a file name may contain any plugin's word (that one turned the LEDs on)
     if re.search(r"\bфайл", p) and re.match(r"(?:а\s+)?(?:найди|найти|поищи|где|покажи)", p):
         return show_file(p)
+    nl_ = night_route(p)  # ahead of the open / close app routes
+    if nl_:
+        return nl_
+    th = theme_route(p)  # "тёмная тема" (before the settings route: "тема" there opens Personalization)
+    if th:
+        return th
     pm = power_mode_route(p)  # ahead of Xbox and plugins: "Windows баланс" is not the ClawTweaks "баланс" (15 W)
     if pm:
         return pm

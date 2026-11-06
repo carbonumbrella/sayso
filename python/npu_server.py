@@ -14,8 +14,9 @@ Env:
 import os, re, sys, time, uuid, threading, queue
 from typing import List, Optional
 if sys.stdout is None:  # pythonw (autostart): no console, log to a file instead
-    sys.stdout = sys.stderr = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "npu_server.log"),
-                                   "w", encoding="utf-8", buffering=1)
+    import crashlog
+    sys.stdout = sys.stderr = crashlog.setup(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "npu_server.log"),
+                                                  "w", encoding="utf-8", buffering=1))
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel

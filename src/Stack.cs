@@ -130,19 +130,38 @@ namespace ClawVoice
             catch { return false; }
         }
 
+        static readonly Dictionary<string, Process> Started = new();  // to say how the previous run of a script ended
+
         public static void Start(string script)
         {
             if (Running(script)) return;
             if (!PythonHealthy()) { Log.Write($"not starting {script}: the app's Python is broken, run the installer again"); return; }
-            Process.Start(new ProcessStartInfo(PythonW, $"\"{Path.Combine(Dir, script)}\"")
-            { WorkingDirectory = Dir, UseShellExecute = false, CreateNoWindow = true });
+            if (Started.TryGetValue(script, out var old))
+            {
+                try { if (old.HasExited) Log.Write($"{script} had ended: {ExitText(old.ExitCode)}"); } catch { }
+                old.Dispose();
+            }
+            Started[script] = Process.Start(new ProcessStartInfo(PythonW, $"\"{Path.Combine(Dir, script)}\"")
+            { WorkingDirectory = Dir, UseShellExecute = false, CreateNoWindow = true })!;
             Log.Write("started " + script);
         }
+
+        /// <summary>An exit code in words: a normal stop, the "no model" exit of dictate.py, a native crash (an NTSTATUS
+        /// such as 0xC0000005: the stack is in the script's log, written by faulthandler) or a Python error.</summary>
+        static string ExitText(int code) => code switch
+        {
+            0 => "exit 0 (normal)",
+            1 => "exit 1 (Python error, the traceback is in its log)",
+            3 => "exit 3 (no downloaded speech model for the device)",
+            _ when (uint)code >= 0xC0000000 => $"exit 0x{(uint)code:X8} (crashed inside a native library, see its log)",
+            _ => $"exit {code}",
+        };
 
         public static void Stop(string script)
         {
             foreach (int pid in Pids(script))
                 try { Process.GetProcessById(pid).Kill(); } catch { }
+            if (Started.Remove(script, out var p)) p.Dispose();  // killed on purpose: not reported as a crash later
             Log.Write("stopped " + script);
         }
 

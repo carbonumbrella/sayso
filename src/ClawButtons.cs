@@ -14,6 +14,9 @@ namespace ClawVoice
     {
         readonly bool _wizard;
         readonly TextBlock _text = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(4, 0, 0, 0) };
+        // ClawTweaks mouse mode with the hardware controller: the back buttons send no keys at all (found on the Claw)
+        readonly TextBlock _mouseNote = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(4, 6, 0, 0),
+            Text = "В режиме мыши M1 и M2 работают, только если в ClawTweaks включён виртуальный контроллер. С аппаратным (Hardware) кнопки в этом режиме не срабатывают." };
         readonly Button _set = new() { Content = "Настроить задние кнопки M1 и M2", Height = 30, FontSize = 12,
                                        Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left,
                                        Padding = new Thickness(14, 0, 14, 0) };
@@ -60,7 +63,8 @@ namespace ClawVoice
             _autoRow.Children.Add(left); _autoRow.Children.Add(_auto);
             _auto.Click += (_, _) => { SettingsWindow.Set("claw_buttons_auto", _auto.IsChecked == true); AutoNote(); };
 
-            Children.Add(_text); Children.Add(_set); Children.Add(_ask);
+            _mouseNote.SetResourceReference(TextBlock.ForegroundProperty, "Sub");
+            Children.Add(_text); Children.Add(_set); Children.Add(_ask); Children.Add(_mouseNote);
             if (!_wizard) Children.Add(_autoRow);
             _set.Click += (_, _) =>
             {
@@ -101,6 +105,7 @@ namespace ClawVoice
             var want = _state["want"] as JsonObject;
             bool one = (bool?)_state["one_button"] == true;  // only M1: M2 is the user's again
             bool reachable = (bool?)_state["reachable"] == true;
+            _mouseNote.Visibility = reachable ? Visibility.Visible : Visibility.Collapsed;
             _autoRow.Visibility = reachable ? Visibility.Visible : Visibility.Collapsed;
             _auto.IsChecked = AutoOn;
             AutoNote();

@@ -46,18 +46,20 @@
 
   <!-- slim slider -->
   <Style TargetType="Slider">
-    <Setter Property="Height" Value="26"/>
+    <!-- 44 px tall: a finger's target (the thumb has a 44x44 grab area around its 24 px dot) -->
+    <Setter Property="Height" Value="44"/>
     <Setter Property="IsMoveToPointEnabled" Value="True"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Slider">
           <Grid VerticalAlignment="Center">
             <Border Height="6" CornerRadius="3" Background="{DynamicResource Ghost}"/>
-            <Track x:Name="PART_Track">
+            <!-- the grab area overhangs the bar by 10 px each side, so the dot still reaches its ends -->
+            <Track x:Name="PART_Track" Margin="-10,0">
               <Track.DecreaseRepeatButton>
                 <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
                   <RepeatButton.Template>
-                    <ControlTemplate><Border Height="6" CornerRadius="3" Background="{DynamicResource Accent}"/></ControlTemplate>
+                    <ControlTemplate><Border Height="6" CornerRadius="3" Margin="10,0,-22,0" Background="{DynamicResource Accent}"/></ControlTemplate>
                   </RepeatButton.Template>
                 </RepeatButton>
               </Track.DecreaseRepeatButton>
@@ -70,9 +72,11 @@
                 <Thumb>
                   <Thumb.Template>
                     <ControlTemplate>
-                      <Ellipse Width="20" Height="20" Fill="White" Stroke="{DynamicResource Accent}" StrokeThickness="2">
-                        <Ellipse.Effect><DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.3"/></Ellipse.Effect>
-                      </Ellipse>
+                      <Grid Width="44" Height="44" Background="Transparent">
+                        <Ellipse Width="24" Height="24" Fill="White" Stroke="{DynamicResource Accent}" StrokeThickness="2">
+                          <Ellipse.Effect><DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.3"/></Ellipse.Effect>
+                        </Ellipse>
+                      </Grid>
                     </ControlTemplate>
                   </Thumb.Template>
                 </Thumb>

@@ -17,8 +17,9 @@ POLL, RELEASE_POLLS = 0.01, 3
 
 user32 = ctypes.windll.user32
 if sys.stdout is None:
-    sys.stdout = sys.stderr = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "hotkey_helper.log"),
-                                   "w", encoding="utf-8", buffering=1)
+    import crashlog
+    sys.stdout = sys.stderr = crashlog.setup(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "hotkey_helper.log"),
+                                                  "w", encoding="utf-8", buffering=1))
 out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
@@ -61,11 +62,13 @@ while True:
             _, held_vk, mode, _ = HOTKEYS[msg.wParam]
             gone = 0
             out.sendto(f"down {mode}".encode(), EVENTS)
+            print(f"down {mode}", flush=True)  # in the log: did the key reach the helper at all
     if held_vk is not None:
         gone = 0 if user32.GetAsyncKeyState(held_vk) & 0x8000 else gone + 1
         if gone >= RELEASE_POLLS:
             held_vk = None
             out.sendto(b"up", EVENTS)
+            print("up", flush=True)
     elif time.time() - checked > 1:  # new combinations from the Settings window (not while one is held)
         checked = time.time()
         keys = voice_settings.hotkeys()

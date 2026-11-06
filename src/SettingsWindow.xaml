@@ -93,16 +93,20 @@
             <TextBlock Text="ПРОЧЕЕ" Style="{StaticResource Label}"/>
             <Border CornerRadius="14" Background="{DynamicResource Card}" Padding="14,4">
               <StackPanel>
-                <Grid Margin="0,8">
-                  <StackPanel Margin="0,0,56,0">
-                    <StackPanel Orientation="Horizontal">
-                      <TextBlock Text="Микрофон всегда готов от сети" FontWeight="SemiBold"/>
-                      <local:HelpTip Text="От сети микрофон не закрывается: запись начинается сразу и захватывает 0.4 с до нажатия. От батареи он закрывается ради экономии."/>
-                    </StackPanel>
-                    <TextBlock Text="Быстрее отклик, пока включено слушание имени" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap"/>
+                <StackPanel Margin="0,8">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Микрофон наготове" FontWeight="SemiBold"/>
+                    <local:HelpTip Text="Пока микрофон открыт, запись начинается сразу и захватывает 0.4 с до нажатия, а в трее горит значок микрофона. Закрытый микрофон просыпается около секунды, и начало фразы может потеряться."/>
                   </StackPanel>
-                  <CheckBox x:Name="WarmSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                </Grid>
+                  <Border Style="{StaticResource SegBox}" Margin="0,6,0,0">
+                    <UniformGrid Rows="1">
+                      <RadioButton x:Name="MicReadyAlways" Content="Всегда от сети" GroupName="micready" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="MicReadyLinger" Content="5 минут" GroupName="micready" Style="{StaticResource Seg}"/>
+                      <RadioButton x:Name="MicReadyPress" Content="При нажатии" GroupName="micready" Style="{StaticResource Seg}"/>
+                    </UniformGrid>
+                  </Border>
+                  <TextBlock x:Name="MicReadyHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
                 <Border Height="1" Background="{DynamicResource Border}"/>
                 <Grid Margin="0,8">
                   <StackPanel Margin="0,0,56,0">
@@ -186,66 +190,7 @@
         <!-- ================= voice ================= -->
         <Grid x:Name="PageVoice" Visibility="Collapsed">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
-          <StackPanel>
-            <StackPanel x:Name="NameSection">
-            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
-              <TextBlock Text="ИМЯ ПОМОЩНИКА" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="На это слово откликается помощник, так он себя и называет. Лучше 2-3 слога, не похожие на частые слова. «Тренировать имя» учит распознавание вашему произношению."/>
-            </StackPanel>
-            <Grid>
-              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-              <TextBox x:Name="NameBox" Style="{StaticResource Field}"/>
-              <Button x:Name="NameBtn" Grid.Column="2" Content="Сохранить" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>
-            </Grid>
-            <Grid Margin="0,6,0,0">
-              <TextBlock x:Name="NameHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,120,0"
-                         Text="Зовите по имени в начале фразы: «Сэйсо, громкость сорок»."/>
-              <Button x:Name="TrainBtn" Content="Тренировать имя" Style="{StaticResource Flat}" Height="30" FontSize="12"
-                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
-            </Grid>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
-              <TextBlock Text="ЯЗЫК" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Язык распознавания и ответов. «Авто» определяет язык каждой фразы, на коротких фразах иногда ошибается."/>
-            </StackPanel>
-            <Border Style="{StaticResource SegBox}">
-              <UniformGrid Rows="1">
-                <RadioButton x:Name="LangRu" Content="Русский" GroupName="lang" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="LangEn" Content="English" GroupName="lang" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="LangAuto" Content="Авто" GroupName="lang" Style="{StaticResource Seg}"/>
-              </UniformGrid>
-            </Border>
-            <TextBlock Text="МИКРОФОН" Style="{StaticResource Label}" ToolTip="«По умолчанию» берёт микрофон, выбранный в Windows"/>
-            <ComboBox x:Name="MicBox" Style="{StaticResource Combo}"/>
-            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
-              <TextBlock Text="ОБРАБОТКА МИКРОФОНА" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Аппаратная: шум и музыку убирает драйвер микрофона, если умеет (Intel Smart Sound на MSI Claw), под музыку ошибок меньше. Обычная: звук как есть, для внешних микрофонов и гарнитур."/>
-            </StackPanel>
-            <Border Style="{StaticResource SegBox}">
-              <UniformGrid Rows="1">
-                <RadioButton x:Name="MicProcHw" Content="Аппаратная" GroupName="micproc" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="MicProcOff" Content="Обычная" GroupName="micproc" Style="{StaticResource Seg}"/>
-              </UniformGrid>
-            </Border>
-            <Grid Margin="0,6,0,0">
-              <TextBlock x:Name="MicProcHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,150,0"
-                         Text="Аппаратная работает, если драйвер это умеет, иначе как обычная."/>
-              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
-                <Button x:Name="MicFxBtn" Content="Звук в Windows" Style="{StaticResource Flat}" Height="30" FontSize="12"/>
-                <local:HelpTip Text="Открывает свойства микрофона в Windows. Если там выключить «Улучшение звука», аппаратная обработка работает как обычная."/>
-              </StackPanel>
-            </Grid>
-            <StackPanel x:Name="FollowLabel" Orientation="Horizontal" Margin="4,14,0,6">
-              <TextBlock Text="СЛУШАТЬ ПОСЛЕ ОТВЕТА" Style="{StaticResource Label}" Margin="0"/>
-              <local:HelpTip Text="Сколько секунд помощник ждёт следующую фразу без имени и кнопки. 0: не ждёт. Пока ждёт, музыка звучит тише."/>
-            </StackPanel>
-            <Grid x:Name="FollowRow">
-              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="60"/></Grid.ColumnDefinitions>
-              <Slider x:Name="FollowSlider" Minimum="0" Maximum="15" TickFrequency="1" IsSnapToTickEnabled="True"/>
-              <TextBlock x:Name="FollowText" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold"/>
-            </Grid>
-          </StackPanel>
-          <StackPanel x:Name="VoiceSection" Grid.Column="2">
+          <StackPanel x:Name="VoiceSection">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ГОЛОС ОТВЕТОВ" Style="{StaticResource Label}" Margin="0"/>
               <local:HelpTip Text="Голоса Windows, новые добавляются в Параметрах: «Время и язык», «Речь». Скорость и громкость меняют только голос помощника."/>
@@ -277,8 +222,6 @@
               <Slider x:Name="VolumeSlider" Grid.Row="2" Grid.Column="1" Minimum="10" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True"/>
               <TextBlock x:Name="VolumeText" Grid.Row="2" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold"/>
             </Grid>
-            <TextBlock x:Name="VoiceHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,10,0,0"
-                       Text="Язык и микрофон применяются после перезапуска диктовки, это делается само."/>
           </StackPanel>
         </Grid>
 
@@ -286,6 +229,23 @@
         <Grid x:Name="PageModel" Visibility="Collapsed">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
           <StackPanel>
+            <StackPanel x:Name="NameSection">
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="ИМЯ ПОМОЩНИКА" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="На это слово откликается помощник, так он себя и называет. Лучше 2-3 слога, не похожие на частые слова. «Тренировать имя» учит распознавание вашему произношению."/>
+            </StackPanel>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <TextBox x:Name="NameBox" Style="{StaticResource Field}"/>
+              <Button x:Name="NameBtn" Grid.Column="2" Content="Сохранить" Style="{StaticResource Flat}" Background="{DynamicResource Accent}" Foreground="White"/>
+            </Grid>
+            <Grid Margin="0,6,0,0">
+              <TextBlock x:Name="NameHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,120,0"
+                         Text="Зовите по имени в начале фразы: «Сэйсо, громкость сорок»."/>
+              <Button x:Name="TrainBtn" Content="Тренировать имя" Style="{StaticResource Flat}" Height="30" FontSize="12"
+                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
+            </Grid>
+            </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
               <TextBlock Text="ПОМОЩНИК И ЯЗЫКОВАЯ МОДЕЛЬ" Style="{StaticResource Label}" Margin="0"/>
               <local:HelpTip Text="Модель нужна для разговора и необычных команд, без неё работают команды из «Что умеет». Локально: Gemma на этом ПК, около 4 ГБ памяти. Свой сервер: Ollama, LM Studio. Облако: Gemini, нужен ключ."/>
@@ -295,12 +255,13 @@
               <TextBlock x:Name="ModelNow" TextWrapping="Wrap" FontWeight="SemiBold"/>
             </Border>
             <Border Style="{StaticResource SegBox}">
-              <UniformGrid Rows="1">
-                <RadioButton x:Name="ProvNone" Content="Без модели" GroupName="prov" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="ProvNpu" Content="Локально" GroupName="prov" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="ProvServer" Content="Свой сервер" GroupName="prov" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="ProvCloud" Content="Облако" GroupName="prov" Style="{StaticResource Seg}"/>
-              </UniformGrid>
+              <Grid><!-- widths after the labels -->
+                <Grid.ColumnDefinitions><ColumnDefinition Width="10*"/><ColumnDefinition Width="9*"/><ColumnDefinition Width="12*"/><ColumnDefinition Width="7*"/></Grid.ColumnDefinitions>
+                <RadioButton x:Name="ProvNone" Grid.Column="0" Content="Без модели" GroupName="prov" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="ProvNpu" Grid.Column="1" Content="Локально" GroupName="prov" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="ProvServer" Grid.Column="2" Content="Свой сервер" GroupName="prov" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="ProvCloud" Grid.Column="3" Content="Облако" GroupName="prov" Style="{StaticResource Seg}"/>
+              </Grid>
             </Border>
             <TextBlock x:Name="ProvHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
             <TextBlock Text="ИНТЕРНЕТ" Style="{StaticResource Label}"/>
@@ -316,6 +277,15 @@
                 <CheckBox x:Name="OfflineSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
               </Grid>
             </Border>
+            <StackPanel x:Name="FollowLabel" Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="СЛУШАТЬ ПОСЛЕ ОТВЕТА" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Сколько секунд помощник ждёт следующую фразу без имени и кнопки. 0: не ждёт. Пока ждёт, музыка звучит тише."/>
+            </StackPanel>
+            <Grid x:Name="FollowRow">
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="60"/></Grid.ColumnDefinitions>
+              <Slider x:Name="FollowSlider" Minimum="0" Maximum="15" TickFrequency="1" IsSnapToTickEnabled="True"/>
+              <TextBlock x:Name="FollowText" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            </Grid>
           </StackPanel>
           <StackPanel Grid.Column="2">
             <StackPanel x:Name="NpuFields" Visibility="Collapsed">
@@ -324,12 +294,13 @@
                 <local:HelpTip Text="NPU: экономно, видеокарта свободна для игр. Видеокарта: быстрее всего. Процессор: на любом ПК, но медленно. Около 4 ГБ памяти в любом случае."/>
               </StackPanel>
               <Border Style="{StaticResource SegBox}">
-                <UniformGrid Rows="1">
-                  <RadioButton x:Name="LlmDevAuto" Content="Авто" GroupName="llmdev" Style="{StaticResource Seg}"/>
-                  <RadioButton x:Name="LlmDevNpu" Content="NPU" GroupName="llmdev" Style="{StaticResource Seg}"/>
-                  <RadioButton x:Name="LlmDevGpu" Content="Видеокарта" GroupName="llmdev" Style="{StaticResource Seg}"/>
-                  <RadioButton x:Name="LlmDevCpu" Content="Процессор" GroupName="llmdev" Style="{StaticResource Seg}"/>
-                </UniformGrid>
+                <Grid><!-- widths after the labels -->
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="6*"/><ColumnDefinition Width="5*"/><ColumnDefinition Width="11*"/><ColumnDefinition Width="10*"/></Grid.ColumnDefinitions>
+                  <RadioButton x:Name="LlmDevAuto" Grid.Column="0" Content="Авто" GroupName="llmdev" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="LlmDevNpu" Grid.Column="1" Content="NPU" GroupName="llmdev" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="LlmDevGpu" Grid.Column="2" Content="Видеокарта" GroupName="llmdev" Style="{StaticResource Seg}"/>
+                  <RadioButton x:Name="LlmDevCpu" Grid.Column="3" Content="Процессор" GroupName="llmdev" Style="{StaticResource Seg}"/>
+                </Grid>
               </Border>
               <TextBlock x:Name="GemmaState" FontSize="12" TextWrapping="Wrap" Margin="4,10,0,0"/>
               <StackPanel x:Name="GemmaGet">
@@ -477,12 +448,13 @@
               <local:HelpTip Text="NPU: экономно, видеокарта свободна для игр. Видеокарта: быстрее всего. Процессор: на любом ПК, но медленнее. Смена перезапускает диктовку."/>
             </StackPanel>
             <Border Style="{StaticResource SegBox}">
-              <UniformGrid Rows="1">
-                <RadioButton x:Name="DevAuto" Content="Авто" GroupName="dev" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="DevNpu" Content="NPU" GroupName="dev" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="DevGpu" Content="Видеокарта" GroupName="dev" Style="{StaticResource Seg}"/>
-                <RadioButton x:Name="DevCpu" Content="Процессор" GroupName="dev" Style="{StaticResource Seg}"/>
-              </UniformGrid>
+              <Grid><!-- widths after the labels -->
+                <Grid.ColumnDefinitions><ColumnDefinition Width="6*"/><ColumnDefinition Width="5*"/><ColumnDefinition Width="11*"/><ColumnDefinition Width="10*"/></Grid.ColumnDefinitions>
+                <RadioButton x:Name="DevAuto" Grid.Column="0" Content="Авто" GroupName="dev" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="DevNpu" Grid.Column="1" Content="NPU" GroupName="dev" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="DevGpu" Grid.Column="2" Content="Видеокарта" GroupName="dev" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="DevCpu" Grid.Column="3" Content="Процессор" GroupName="dev" Style="{StaticResource Seg}"/>
+              </Grid>
             </Border>
             <TextBlock x:Name="HwText" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0" Text="Определяю железо…"/>
             <TextBlock x:Name="SysStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
@@ -494,6 +466,19 @@
                 <Button x:Name="SttAskCancel" Content="Отмена" Style="{StaticResource Flat}" Height="30" FontSize="12" Padding="14,0" Margin="8,0,0,0"/>
               </StackPanel>
             </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="ЯЗЫК" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Язык распознавания и ответов. «Авто» определяет язык каждой фразы, на коротких фразах иногда ошибается."/>
+            </StackPanel>
+            <Border Style="{StaticResource SegBox}">
+              <UniformGrid Rows="1">
+                <RadioButton x:Name="LangRu" Content="Русский" GroupName="lang" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="LangEn" Content="English" GroupName="lang" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="LangAuto" Content="Авто" GroupName="lang" Style="{StaticResource Seg}"/>
+              </UniformGrid>
+            </Border>
+            <TextBlock Text="МИКРОФОН" Style="{StaticResource Label}" ToolTip="«По умолчанию» берёт микрофон, выбранный в Windows"/>
+            <ComboBox x:Name="MicBox" Style="{StaticResource Combo}"/>
           </StackPanel>
           <StackPanel Grid.Column="2">
             <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
@@ -504,6 +489,26 @@
               <StackPanel x:Name="ModelRows"/>
             </Border>
             <TextBlock x:Name="ModelsStatus" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,8,0,0"/>
+            <StackPanel Orientation="Horizontal" Margin="4,14,0,6">
+              <TextBlock Text="ОБРАБОТКА МИКРОФОНА" Style="{StaticResource Label}" Margin="0"/>
+              <local:HelpTip Text="Аппаратная: шум и музыку убирает драйвер микрофона, если умеет (Intel Smart Sound на MSI Claw), под музыку ошибок меньше. Обычная: звук как есть, для внешних микрофонов и гарнитур."/>
+            </StackPanel>
+            <Border Style="{StaticResource SegBox}">
+              <UniformGrid Rows="1">
+                <RadioButton x:Name="MicProcHw" Content="Аппаратная" GroupName="micproc" Style="{StaticResource Seg}"/>
+                <RadioButton x:Name="MicProcOff" Content="Обычная" GroupName="micproc" Style="{StaticResource Seg}"/>
+              </UniformGrid>
+            </Border>
+            <Grid Margin="0,6,0,0">
+              <TextBlock x:Name="MicProcHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,0,150,0"
+                         Text="Аппаратная работает, если драйвер это умеет, иначе как обычная."/>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                <Button x:Name="MicFxBtn" Content="Звук в Windows" Style="{StaticResource Flat}" Height="30" FontSize="12"/>
+                <local:HelpTip Text="Открывает свойства микрофона в Windows. Для диктовки оставьте «Эффекты устройства по умолчанию»: Voice Clarity сделан для звонков, а без улучшения остаются шумы. Если после смены звук пропал, верните «По умолчанию» или перезагрузите компьютер."/>
+              </StackPanel>
+            </Grid>
+            <TextBlock x:Name="VoiceHint" Foreground="{DynamicResource Sub}" FontSize="12" TextWrapping="Wrap" Margin="4,10,0,0"
+                       Text="Язык и микрофон применяются после перезапуска диктовки, это делается само."/>
           </StackPanel>
         </Grid>
 
